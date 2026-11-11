@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.0.0-r1';
+const APP_VERSION = '5.0.1-r1';
 
 /* ============================================================
    CONSTANTS & DEFAULTS

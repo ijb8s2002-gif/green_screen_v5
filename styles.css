@@ -9,7 +9,7 @@
 html,body{margin:0;height:100%}
 body{background:#F2ECE1}
 button,input,select,textarea{font:inherit;color:inherit}
-.gs-root{min-height:100vh;background:var(--bg);color:var(--ink);font-family:'Geist',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.45;display:flex;align-items:stretch;-webkit-font-smoothing:antialiased}
+.gs-root{min-height:100vh;min-height:100dvh;background:var(--bg);color:var(--ink);font-family:'Geist',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.45;display:flex;align-items:stretch;-webkit-font-smoothing:antialiased}
 .gs-root,.gs-root *{transition:background-color .28s ease,border-color .28s ease,color .28s ease,box-shadow .2s ease,transform .18s cubic-bezier(.2,.7,.2,1),opacity .2s ease}
 .mono{font-family:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace}
 .muted{color:var(--muted)}
@@ -23,7 +23,7 @@ a{color:inherit}
 .press:active{transform:scale(.97)}
 
 /* ---------- sidebar ---------- */
-.side{flex:0 0 216px;width:216px;background:var(--side);border-right:1px solid var(--line);padding:22px 14px 16px;display:flex;flex-direction:column;gap:22px;position:sticky;top:0;height:100vh;z-index:20;transition:flex-basis .32s cubic-bezier(.2,.7,.2,1),width .32s cubic-bezier(.2,.7,.2,1),padding .32s cubic-bezier(.2,.7,.2,1)}
+.side{flex:0 0 216px;width:216px;background:var(--side);border-right:1px solid var(--line);padding:22px 14px 16px;display:flex;flex-direction:column;gap:22px;position:sticky;top:0;height:100vh;height:100dvh;z-index:20;align-self:flex-start;transition:flex-basis .32s cubic-bezier(.2,.7,.2,1),width .32s cubic-bezier(.2,.7,.2,1),padding .32s cubic-bezier(.2,.7,.2,1)}
 .side.collapsed{flex-basis:56px;width:56px;padding-left:8px;padding-right:8px}
 .brand{display:flex;align-items:center;gap:10px;padding:0 8px;text-decoration:none}
 .logo{width:28px;height:28px;border-radius:8px;background:var(--accent);display:grid;place-items:center;flex:none}
@@ -39,7 +39,7 @@ a{color:inherit}
 .side.collapsed .nav,.side.collapsed .toggle,.side.collapsed .brand,.side.collapsed .syncind{width:40px;align-self:center;justify-content:center;padding-left:0;padding-right:0;gap:0}
 .side.collapsed .brand{padding-left:0}
 .sidehead{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:0 10px 4px;height:16px}
-.proj{display:flex;flex-direction:column;gap:6px;padding:8px 12px;border-radius:8px;text-decoration:none;position:relative}
+.proj{display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:8px 12px;border-radius:8px;text-decoration:none;position:relative}
 .proj:hover{background:var(--hover)}
 .prow{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--ink)}
 .dot{width:8px;height:8px;border-radius:99px;flex:none;display:inline-block}
@@ -70,8 +70,17 @@ a{color:inherit}
 .side.collapsed .toggle svg{transform:rotate(180deg)}
 
 /* ---------- main ---------- */
-.main{flex:1 1 560px;min-width:0;padding:30px 40px 72px;max-width:1320px}
-.main.narrow{max-width:1100px}
+.main{flex:1 1 560px;min-width:0;padding:30px 40px 72px;max-width:1320px;margin-inline:auto}
+.main.narrow{max-width:1160px}
+.mainwrap{flex:1 1 560px;min-width:0;display:flex}
+/* Big screens: center the page and scale everything up a touch so it reads like the iPad */
+@media (min-width:1500px){.main{max-width:1400px;padding-left:48px;padding-right:48px}.main.narrow{max-width:1220px}}
+@media (min-width:1800px){.gs-root{zoom:1.1}.side{height:calc(100dvh / 1.1)}.gs-root{min-height:calc(100dvh / 1.1)}}
+@media (min-width:2200px){.gs-root{zoom:1.22}.side{height:calc(100dvh / 1.22)}.gs-root{min-height:calc(100dvh / 1.22)}}
+@media (min-width:2800px){.gs-root{zoom:1.4}.side{height:calc(100dvh / 1.4)}.gs-root{min-height:calc(100dvh / 1.4)}}
+@media (min-width:1800px){#overlay,#toastbox,#updbox{zoom:1.1}}
+@media (min-width:2200px){#overlay,#toastbox,#updbox{zoom:1.22}}
+@media (min-width:2800px){#overlay,#toastbox,#updbox{zoom:1.4}}
 @keyframes pexit{to{opacity:0;transform:translateX(-16px)}}
 .main.page-exit{animation:pexit .24s cubic-bezier(.4,0,.2,1) forwards;pointer-events:none}
 .phead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:24px}
