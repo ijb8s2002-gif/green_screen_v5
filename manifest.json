@@ -3,7 +3,7 @@
   "short_name": "Green Screen",
   "description": "Landscape design project & task tracker",
   "id": "./",
-  "start_url": "./#/projects",
+  "start_url": "./#/dashboard",
   "scope": "./",
   "display": "standalone",
   "background_color": "#F2ECE1",

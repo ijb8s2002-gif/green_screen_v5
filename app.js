@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.0.4-r1';
+const APP_VERSION = '5.0.5-r2';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -124,7 +124,9 @@ const U = {
   np: null,
   exiting: false,
   gone: null,
-  busy: false
+  busy: false,
+  tleave: {}, tback: {}, tgroups: {}, dgroups: {}, dsel: lsGet('gs5:dsel', 'all'), tsort: lsGet('gs5:tsort', 'due'), tsearch: '', dueDay: null,
+  dash: lsGet('gs5:dash', {}), wopen: {}, wdrag: null
 };
 const LOCAL_ONLY = location.protocol === 'file:' || /[?&]local\b/.test(location.search);
 
@@ -328,7 +330,7 @@ function parseRoute() {
   const h = location.hash.replace(/^#\/?/, '');
   const [page, id] = h.split('/');
   const pages = ['dashboard', 'tasklist', 'due', 'projects', 'operations', 'workflow', 'archived', 'settings', 'project'];
-  return { page: pages.includes(page) ? page : 'projects', id: id || null };
+  return { page: pages.includes(page) ? page : 'dashboard', id: id || null };
 }
 function go(hash, opts = {}) {
   if (opts.exit && motionOK()) {
@@ -365,6 +367,7 @@ function render() {
   main.innerHTML = html;
   U.enter = false;
   animateStageBar(oldSeg);
+  if (U.route.page === 'dashboard') fitRecentRow();
   if (keep) {
     const el = document.getElementById(keep.id);
     if (el) { el.value = keep.v; el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} }
@@ -405,7 +408,7 @@ function renderSide() {
       <span class="pbar"><i style="width:${pr.pct}%;background:${dColor(p.designer)}"></i></span></a>`;
   }).join('') : `<div class="lbl" style="font-size:12.5px;color:var(--muted);padding:2px 10px;white-space:normal">No open projects yet</div>`;
   return `<aside class="side${U.collapsed ? ' collapsed' : ''}">
-    <a class="brand" href="#/projects" title="Green Screen"><span class="logo">${I.leaf()}</span><span class="lbl" style="font-weight:600;font-size:16px;letter-spacing:-.01em;color:var(--ink)">Green Screen</span></a>
+    <a class="brand" href="#/dashboard" title="Green Screen"><span class="logo">${I.leaf()}</span><span class="lbl" style="font-weight:600;font-size:16px;letter-spacing:-.01em;color:var(--ink)">Green Screen</span></a>
     <nav class="navlist" aria-label="Main">${navHtml}</nav>
     <div style="display:flex;flex-direction:column;gap:6px;min-height:0">
       <div class="sidehead"><span class="lbl">Open projects</span></div>
@@ -444,10 +447,10 @@ function renderPage() {
     case 'projects': return pageProjects();
     case 'project': return pageProject();
     case 'settings': return pageSettings();
-    case 'dashboard': return pageSoon('Dashboard', 'Round 2', 'Urgent tasks, an Operations snapshot and your recently edited projects.');
-    case 'tasklist': return pageSoon('Tasklist', 'Round 2', 'Every open step from each project’s current stage, grouped by priority.');
-    case 'due': return pageSoon('Due Soon', 'Round 2', 'Overdue and upcoming target dates for the next two weeks.');
-    case 'workflow': return pageSoon('Workflow', 'Round 2', 'Edit the 40-step template: titles, details, order and optional steps.');
+    case 'dashboard': return pageDashboard();
+    case 'tasklist': return pageTasklist();
+    case 'due': return pageDue();
+    case 'workflow': return pageWorkflow();
     case 'operations': return pageSoon('Operations', 'Round 3', 'Needs processing, the install schedule, crew leaders and the ops email builder.');
     case 'archived': return pageSoon('Archived', 'Round 3', 'Archived projects with the 14-day cleanout, pinning and restore.');
     default: return pageProjects();
@@ -499,7 +502,7 @@ function pageProjects() {
   const none = q && !list.length ? `<div class="empty">No projects match “${esc(U.search)}”.</div>` : '';
   return head + drawers + none;
 }
-function folderHtml(p) {
+function folderHtml(p, opts = {}) {
   const it = projItems(p); const cs = curStage(p, it); const pr = progress(p, it); const sc = stageCounts(p, it);
   let meta = 'Edited ' + ago(p.updatedAt), hot = false;
   if (U.sort === 'urgent') { meta = sc.urgent || sc.medium ? [sc.urgent ? sc.urgent + ' urgent' : '', sc.medium ? sc.medium + ' medium' : ''].filter(Boolean).join(' · ') : 'Nothing urgent'; hot = sc.urgent > 0; }
@@ -511,11 +514,11 @@ function folderHtml(p) {
       <span class="fpaper" aria-hidden="true"></span>
       <span class="fcover">
         <span style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="display:flex;align-items:center;gap:6px;min-width:0"><span class="dot" style="width:7px;height:7px;background:${dColor(p.designer)}"></span><span class="fname">${esc(p.name)}</span></span><span class="faddr">${esc(p.address) || '<span style="opacity:.6">No address</span>'}</span></span>
-        <span class="fmeta"><label class="mono" style="font-size:11px;display:inline-flex;align-items:center;gap:5px" data-stop="1">PO<input class="fpo" id="po-${p.id}" value="${esc(p.po)}" placeholder="Add PO#" data-commit="po" data-id="${p.id}" aria-label="PO number for ${esc(p.name)}" autocomplete="off"></label><span class="${hot ? 'hot' : ''}">${esc(meta)}</span></span>
+        <span class="fmeta"><label class="mono" style="font-size:11px;display:inline-flex;align-items:center;gap:5px" data-stop="1">PO<input class="fpo" id="po-${opts.noActs ? 'r' : 'f'}-${p.id}" value="${esc(p.po)}" placeholder="Add PO#" data-commit="po" data-id="${p.id}" aria-label="PO number for ${esc(p.name)}" autocomplete="off"></label><span class="${hot ? 'hot' : ''}">${esc(meta)}</span></span>
         <span style="display:flex;align-items:center;gap:8px"><span style="flex:1;display:flex;gap:2px">${STAGES.map((_, i) => `<span class="mseg${i < cs ? ' on' : i === cs ? ' now' : ''}"></span>`).join('')}</span><span class="mono" style="font-size:11px;color:var(--muted)">${pr.pct}%</span></span>
       </span>
     </div>
-    <div class="facts"><button class="ibtn press" data-act="archiveFolder" data-id="${p.id}" title="Archive" aria-label="Archive ${esc(p.name)}">${I.box(14)}</button><button class="ibtn del press" data-act="deleteFolder" data-id="${p.id}" title="Delete" aria-label="Delete ${esc(p.name)}">${I.trash()}</button></div>
+    ${opts.noActs ? '' : `<div class="facts"><button class="ibtn press" data-act="archiveFolder" data-id="${p.id}" title="Archive" aria-label="Archive ${esc(p.name)}">${I.box(14)}</button><button class="ibtn del press" data-act="deleteFolder" data-id="${p.id}" title="Delete" aria-label="Delete ${esc(p.name)}">${I.trash()}</button></div>`}
   </div>`;
 }
 
@@ -592,6 +595,29 @@ function stageHtml(p, si, cs, items) {
     <div style="display:flex;align-items:center;gap:10px;padding:6px 10px 2px;border-top:1px solid var(--line)"><span style="width:22px;display:grid;place-items:center;color:var(--muted)">${I.plus}</span><label style="flex:1;display:flex"><span class="sr">Add a step to ${STAGES[si]}</span><input id="add-${si}" class="addin" placeholder="Add step to this project — press Enter" data-add="${si}" autocomplete="off"></label></div>
   </div></section>`;
 }
+function stepCells(p, x) {
+  const k = x.key, m = U.menu, mk = p.id + ':' + k;
+  const st = x.st;
+  const c = U.casc && U.casc.pid === p.id && U.casc.ids[k] !== undefined ? U.casc.ids[k] : null;
+  // due
+  const hasDue = !!st.due;
+  const dOpen = m && m.kind === 'due' && m.key === mk;
+  const dueMenu = dOpen ? `<div class="smenu pop-in" role="menu" style="min-width:210px"><div class="mhead">Target date</div>${quickDates().map(q => `<button class="mi" role="menuitem" data-act="setDue" data-pid="${p.id}" data-k="${k}" data-v="${q.iso}">${q.label}<span class="hint">${q.hint}</span></button>`).join('')}<label class="mpick">Pick a date<input type="date" value="${st.due}" data-change="pickDue" data-pid="${p.id}" data-k="${k}"></label>${hasDue ? `<button class="mi danger" role="menuitem" data-act="setDue" data-pid="${p.id}" data-k="${k}" data-v="">Clear date</button>` : ''}</div>` : '';
+  const due = `<div style="position:relative;min-width:0"><button class="duebtn press tone-${dueTone(st.due)}${hasDue ? '' : ' empty'}" data-act="menu" data-kind="due" data-key="${mk}" aria-haspopup="menu" aria-expanded="${dOpen}" title="Set target date">${I.cal}${hasDue ? esc(dueLabel(st.due)) : 'Set date'}</button>${dueMenu}</div>`;
+  // priority
+  const sg = suggestion(x); const sug = !!sg;
+  const pOpen = m && m.kind === 'pri' && m.key === mk;
+  const nextLv = LEVELS[Math.min(LEVELS.indexOf(st.p) + 1, 2)];
+  const bars = (lv) => `<span class="bars lv-${lv}"><i class="on"></i><i class="${lv !== 'LOW' ? 'on' : ''}"></i><i class="${lv === 'URGENT' ? 'on' : ''}"></i></span>`;
+  const priMenu = pOpen ? `<div class="smenu pop-in" role="menu" style="min-width:190px">${sug ? `<div class="sugbox${sg.overdue ? ' late' : ''}">${esc(sg.when)}<span style="display:flex;gap:6px"><button class="sugbtn press" data-act="raise" data-pid="${p.id}" data-k="${k}">${I.arrowUp}Raise to ${PL[sg.target]}</button><button class="sugbtn plain press" data-act="dismiss" data-pid="${p.id}" data-k="${k}">Dismiss</button></span></div>` : ''}${LEVELS.map(lv => `<button class="mi${lv === st.p ? ' cur' : ''}" role="menuitemradio" aria-checked="${lv === st.p}" data-act="setPri" data-pid="${p.id}" data-k="${k}" data-v="${lv}">${bars(lv)}${PL[lv]}</button>`).join('')}</div>` : '';
+  const pri = `<div style="position:relative"><button class="pbtn press tile-${st.p}" data-act="menu" data-kind="pri" data-key="${mk}" aria-haspopup="menu" aria-expanded="${pOpen}" title="Priority: ${PL[st.p]}${sug ? ' — ' + (sg.overdue ? 'overdue' : 'due soon') + ', consider raising to ' + PL[sg.target] : ''}" aria-label="Priority: ${PL[st.p]}">${bars(st.p)}${sug ? `<span class="sugdot${sg.overdue ? ' late' : ''}" aria-hidden="true">${I.arrowUp}</span>` : ''}</button>${priMenu}</div>`;
+  // status
+  const sOpen = m && m.kind === 'st' && m.key === mk;
+  const shown = c !== null ? 'Done' : st.s;
+  const stMenu = sOpen ? `<div class="smenu pop-in" role="menu" style="min-width:150px">${STATUSES.map(s => `<button class="mi${s === st.s ? ' cur' : ''}" role="menuitemradio" aria-checked="${s === st.s}" data-act="setStatus" data-pid="${p.id}" data-k="${k}" data-v="${s}"><span class="chip chip-${SK[s]}"><span class="ico ico-${SK[s]}"></span>${s}</span></button>`).join('')}</div>` : '';
+  const status = `<div style="position:relative"><button class="chip chipbtn press chip-${SK[shown]}" data-act="menu" data-kind="st" data-key="${mk}" aria-haspopup="menu" aria-expanded="${sOpen}" aria-label="Status: ${shown}"><span class="ico ico-${SK[shown]}"></span>${shown}</button>${stMenu}</div>`;
+  return { due, pri, status };
+}
 function rowHtml(p, x) {
   const k = x.key, m = U.menu, mk = p.id + ':' + k;
   const st = x.st;
@@ -604,38 +630,272 @@ function rowHtml(p, x) {
   if (un !== null) cls += ' unc';
   if (U.justDone === mk) cls += ' justdone';
   const delay = c !== null ? c * 55 : un !== null ? un * 45 : 0;
-  // due
-  const hasDue = !!st.due;
-  const dOpen = m && m.kind === 'due' && m.key === mk;
-  const dueMenu = dOpen ? `<div class="smenu pop-in" role="menu" style="min-width:210px"><div class="mhead">Target date</div>${quickDates().map(q => `<button class="mi" role="menuitem" data-act="setDue" data-k="${k}" data-v="${q.iso}">${q.label}<span class="hint">${q.hint}</span></button>`).join('')}<label class="mpick">Pick a date<input type="date" value="${st.due}" data-change="pickDue" data-k="${k}"></label>${hasDue ? `<button class="mi danger" role="menuitem" data-act="setDue" data-k="${k}" data-v="">Clear date</button>` : ''}</div>` : '';
-  const due = `<div style="position:relative;min-width:0"><button class="duebtn press tone-${dueTone(st.due)}${hasDue ? '' : ' empty'}" data-act="menu" data-kind="due" data-key="${mk}" aria-haspopup="menu" aria-expanded="${dOpen}" title="Set target date">${I.cal}${hasDue ? esc(dueLabel(st.due)) : 'Set date'}</button>${dueMenu}</div>`;
-  // priority
-  const sg = suggestion(x); const sug = !!sg;
-  const pOpen = m && m.kind === 'pri' && m.key === mk;
-  const nextLv = LEVELS[Math.min(LEVELS.indexOf(st.p) + 1, 2)];
-  const bars = (lv) => `<span class="bars lv-${lv}"><i class="on"></i><i class="${lv !== 'LOW' ? 'on' : ''}"></i><i class="${lv === 'URGENT' ? 'on' : ''}"></i></span>`;
-  const priMenu = pOpen ? `<div class="smenu pop-in" role="menu" style="min-width:190px">${sug ? `<div class="sugbox${sg.overdue ? ' late' : ''}">${esc(sg.when)}<span style="display:flex;gap:6px"><button class="sugbtn press" data-act="raise" data-k="${k}">${I.arrowUp}Raise to ${PL[sg.target]}</button><button class="sugbtn plain press" data-act="dismiss" data-k="${k}">Dismiss</button></span></div>` : ''}${LEVELS.map(lv => `<button class="mi${lv === st.p ? ' cur' : ''}" role="menuitemradio" aria-checked="${lv === st.p}" data-act="setPri" data-k="${k}" data-v="${lv}">${bars(lv)}${PL[lv]}</button>`).join('')}</div>` : '';
-  const pri = `<div style="position:relative"><button class="pbtn press tile-${st.p}" data-act="menu" data-kind="pri" data-key="${mk}" aria-haspopup="menu" aria-expanded="${pOpen}" title="Priority: ${PL[st.p]}${sug ? ' — ' + (sg.overdue ? 'overdue' : 'due soon') + ', consider raising to ' + PL[sg.target] : ''}" aria-label="Priority: ${PL[st.p]}">${bars(st.p)}${sug ? `<span class="sugdot${sg.overdue ? ' late' : ''}" aria-hidden="true">${I.arrowUp}</span>` : ''}</button>${priMenu}</div>`;
-  // status
-  const sOpen = m && m.kind === 'st' && m.key === mk;
-  const shown = c !== null ? 'Done' : st.s;
-  const stMenu = sOpen ? `<div class="smenu pop-in" role="menu" style="min-width:150px">${STATUSES.map(s => `<button class="mi${s === st.s ? ' cur' : ''}" role="menuitemradio" aria-checked="${s === st.s}" data-act="setStatus" data-k="${k}" data-v="${s}"><span class="chip chip-${SK[s]}"><span class="ico ico-${SK[s]}"></span>${s}</span></button>`).join('')}</div>` : '';
-  const status = `<div style="position:relative"><button class="chip chipbtn press chip-${SK[shown]}" data-act="menu" data-kind="st" data-key="${mk}" aria-haspopup="menu" aria-expanded="${sOpen}" aria-label="Status: ${shown}"><span class="ico ico-${SK[shown]}"></span>${shown}</button>${stMenu}</div>`;
+  const { due, pri, status } = stepCells(p, x);
   // title cell
   const isProc = x.kind === 't' && (x.n === 25 || x.n === 26);
   const procBtn = isProc ? `<button class="opslink sm press" data-act="goOps" title="${x.n === 26 ? 'Write the ops email on Operations' : 'Processing step · open Operations'}">${x.n === 26 ? 'EMAIL ›' : 'OPS ›'}</button>` : '';
   const noteIc = st.note ? `<span class="noteic" title="Has a note">${I.note}</span>` : '';
   const tag = x.kind === 'c' ? '<span class="ptag">THIS PROJECT</span>' : '';
-  const titleCell = `<span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="stitle" data-act="expand" data-k="${k}" title="${esc(x.title)}">${esc(x.title)}</span>${tag}${noteIc}</span>`;
+  const titleCell = `<span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="stitle" data-act="expand" data-pid="${p.id}" data-k="${k}" title="${esc(x.title)}">${esc(x.title)}</span>${tag}${noteIc}</span>`;
   // tools
   let tools = '';
   if (x.kind === 'c') {
     const cs = (p.custom || []).filter(cc => cc.stage === x.stage); const idx = cs.findIndex(cc => cc.id === k);
-    tools = `<button class="ibtn press" data-act="moveCustom" data-k="${k}" data-v="-1" title="Move up" ${idx <= 0 ? 'disabled' : ''}>${I.up}</button><button class="ibtn press" data-act="moveCustom" data-k="${k}" data-v="1" title="Move down" ${idx >= cs.length - 1 ? 'disabled' : ''}>${I.dn}</button><button class="ibtn del press" data-act="deleteCustom" data-k="${k}" title="Delete step">${I.trash()}</button>`;
+    tools = `<button class="ibtn press" data-act="moveCustom" data-pid="${p.id}" data-k="${k}" data-v="-1" title="Move up" ${idx <= 0 ? 'disabled' : ''}>${I.up}</button><button class="ibtn press" data-act="moveCustom" data-pid="${p.id}" data-k="${k}" data-v="1" title="Move down" ${idx >= cs.length - 1 ? 'disabled' : ''}>${I.dn}</button><button class="ibtn press" data-act="toTemplate" data-pid="${p.id}" data-k="${k}" title="Add to template (every project)">${svg(14, '<rect x="3" y="3" width="6" height="6" rx="1.5"></rect><rect x="15" y="15" width="6" height="6" rx="1.5"></rect><path d="M6 9v4a2 2 0 0 0 2 2h7"></path>')}</button><button class="ibtn del press" data-act="deleteCustom" data-pid="${p.id}" data-k="${k}" title="Delete step">${I.trash()}</button>`;
   }
   const toolsCell = `<span class="toolcell" style="display:flex;align-items:center;gap:4px;justify-content:flex-end">${procBtn}<span class="tools">${tools}</span></span>`;
-  const exp = U.expanded[mk] ? `<div class="sexp">${x.detail ? `<span>${esc(x.detail)}</span>` : ''}<label style="display:block"><span class="sr">Note</span><textarea id="note-${k}" class="note" rows="2" placeholder="Add a note for this project…" data-commit="note" data-k="${k}">${esc(st.note)}</textarea></label></div>` : '';
-  return `<div class="${cls}" style="--d:${delay}ms" data-k="${k}"><button class="check press" data-act="toggle" data-k="${k}" aria-label="${st.s === 'Done' ? 'Mark not done' : 'Mark done'}">${I.tick()}</button><span class="snum">${x.n || ''}</span>${titleCell}${toolsCell}${due}${pri}${status}${exp}</div>`;
+  const exp = U.expanded[mk] ? `<div class="sexp">${x.detail ? `<span>${esc(x.detail)}</span>` : ''}<label style="display:block"><span class="sr">Note</span><textarea id="note-${k}" class="note" rows="2" placeholder="Add a note for this project…" data-commit="note" data-pid="${p.id}" data-k="${k}">${esc(st.note)}</textarea></label></div>` : '';
+  return `<div class="${cls}" style="--d:${delay}ms" data-pid="${p.id}" data-k="${k}"><button class="check press" data-act="toggle" data-pid="${p.id}" data-k="${k}" aria-label="${st.s === 'Done' ? 'Mark not done' : 'Mark done'}">${I.tick()}</button><span class="snum">${x.n || ''}</span>${titleCell}${toolsCell}${due}${pri}${status}${exp}</div>`;
+}
+
+/* ============================================================
+   SHARED — task rows (Tasklist, Due Soon, Dashboard)
+   ============================================================ */
+function designerPills() {
+  const ds = U.dsel || 'all';
+  const pills = [{ id: 'all', name: 'All designers', color: '' }].concat(designers());
+  return `<div role="group" aria-label="Designer" style="display:flex;gap:6px;flex-wrap:wrap">${pills.map(d => `<button class="fpill press${ds === d.id ? ' on' : ''}" aria-pressed="${ds === d.id}" data-act="dsel" data-v="${d.id}">${d.color ? `<span class="dot" style="background:var(--c-${d.color})"></span>` : ''}${esc(d.id === 'all' ? d.name : firstName(d.name))}</button>`).join('')}</div>`;
+}
+function dselOK(p) { return !U.dsel || U.dsel === 'all' || p.designer === U.dsel; }
+/* every unfinished step with its project, plus handy facts */
+function openSteps(filter) {
+  const out = [];
+  activeProjects().forEach(p => {
+    const items = projItems(p); const cs = curStage(p, items);
+    items.forEach(x => { if (!isClosed(x.st.s)) { const r = { p, x, cs, upcoming: x.stage > cs }; if (!filter || filter(r)) out.push(r); } });
+  });
+  return out;
+}
+const byDue = (a, b) => { const A = a.x.st.due ? daysFrom(a.x.st.due) : 9999, B = b.x.st.due ? daysFrom(b.x.st.due) : 9999; return (A - B) || (LEVELS.indexOf(b.x.st.p) - LEVELS.indexOf(a.x.st.p)) || a.p.name.localeCompare(b.p.name); };
+const TROW_COLS = 'trow-grid';
+function taskHead() { return `<div class="colhead ${TROW_COLS}"><span></span><span></span><span>Project · Task</span><span>Status</span><span>Stage</span><span>Designer</span><span>PO#</span><span>Due</span></div>`; }
+function taskRow(r, opts = {}) {
+  const { p, x } = r; const k = x.key; const mk = p.id + ':' + k;
+  const { due, pri, status } = stepCells(p, x);
+  const leaving = U.tleave[mk];
+  const cls = 'step trow ' + TROW_COLS + (leaving ? ' leaving' : '') + (U.tback[mk] ? ' back' : '');
+  const isProc = x.kind === 't' && (x.n === 25 || x.n === 26);
+  const procTag = isProc ? `<button class="opslink sm press" data-act="goOps" title="${x.n === 26 ? 'Write the ops email on Operations' : 'Processing step · open Operations'}">${x.n === 26 ? 'OPS EMAIL ›' : 'PROCESSING ›'}</button>` : '';
+  const tags = (x.kind === 'c' ? '<span class="ptag">THIS PROJECT</span>' : '') + (r.upcoming && opts.showUpcoming ? '<span class="ptag up" title="Here because of its date · joins the Tasklist when its stage becomes current">UPCOMING STAGE</span>' : '') + procTag;
+  const isOpsStage = x.stage === 4 || x.stage === 5;
+  const stageCell = isOpsStage ? `<span style="min-width:0;display:flex"><button class="opslink press" data-act="goOps" title="Open Operations" style="padding:2px 9px;max-width:100%;overflow:hidden;text-overflow:ellipsis">${I.truck(13)}${STAGES[x.stage]}</button></span>` : `<span class="tcell">${STAGES[x.stage]}</span>`;
+  const d = designer(p.designer);
+  return `<div class="${cls}" data-mk="${mk}">
+    <button class="check press" data-act="tcheck" data-pid="${p.id}" data-k="${k}" aria-label="Mark done">${I.tick()}</button>
+    ${pri}
+    <span class="pathcell"><a href="#/project/${p.id}" class="clink" title="Open ${esc(p.name)}">${esc(p.name)}</a><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex:none;color:var(--muted)"><path d="M9 6l6 6-6 6"></path></svg><span class="stitle" title="${esc(x.title)}">${esc(x.title)}</span>${tags}</span>
+    <span style="display:flex;align-items:center">${status}</span>
+    ${stageCell}
+    <span class="tcell" style="display:flex;align-items:center;gap:6px"><span class="dot" style="width:7px;height:7px;background:var(--c-${d.color})"></span><span style="overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</span></span>
+    <label style="min-width:0"><span class="sr">PO number for ${esc(p.name)}</span><input class="poedit" id="tpo-${opts.idp || 't'}-${p.id}-${k}" value="${esc(p.po)}" placeholder="Add PO#" data-commit="po" data-id="${p.id}" title="PO# · applies to the whole project" autocomplete="off"></label>
+    ${due}
+  </div>`;
+}
+/* checking a step off from a list: it vanishes, with Undo */
+function listComplete(pid, k) {
+  const p = S.projects[pid]; if (!p) return; const x = getItem(p, k); if (!x) return;
+  const mk = pid + ':' + k; if (U.tleave[mk]) return;
+  const finish = () => {
+    delete U.tleave[mk];
+    mutate(pid, q => setItem(q, k, { s: 'Done', doneAt: todayISO() }), '“' + x.title + '” marked done', { onUndo: () => { U.tback[mk] = true; setTimeout(() => { delete U.tback[mk]; }, 500); } });
+  };
+  if (!motionOK()) return finish();
+  U.tleave[mk] = true; U.menu = null; render();
+  setTimeout(finish, 620);
+}
+
+/* ============================================================
+   PAGE — Tasklist
+   ============================================================ */
+function pageTasklist() {
+  const q = (U.tsearch || '').trim().toLowerCase();
+  const rows = openSteps(r => !r.upcoming && dselOK(r.p) && (!q || (r.p.name + ' ' + r.x.title + ' ' + STAGES[r.x.stage] + ' ' + (r.p.po || '')).toLowerCase().includes(q)))
+    .concat(Object.keys(U.tleave).map(mk => { const [pid, k] = mk.split(':'); const p = S.projects[pid]; const x = p && getItem(p, k); return p && x && isClosed(x.st.s) ? { p, x, cs: curStage(p), upcoming: false } : null; }).filter(Boolean));
+  const sorts = { due: byDue, project: (a, b) => a.p.name.localeCompare(b.p.name) || byDue(a, b), stage: (a, b) => (a.x.stage - b.x.stage) || byDue(a, b), recent: (a, b) => (b.p.updatedAt || 0) - (a.p.updatedAt || 0) || byDue(a, b) };
+  const sorter = sorts[U.tsort] || byDue;
+  const total = rows.filter(r => !U.tleave[r.p.id + ':' + r.x.key]).length;
+  const head = `<div class="phead"><div><div class="eyebrow">${total} open · current stages only</div><h1>Tasklist</h1></div>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+      <label><span class="sr">Search tasks</span><input id="t-search" class="search" placeholder="Search tasks or projects" value="${esc(U.tsearch || '')}" data-input="tsearch" autocomplete="off"></label>
+      <label><span class="sr">Sort</span><select class="sel" data-change="tsort">${[['due', 'Due date'], ['project', 'Project A–Z'], ['stage', 'Stage'], ['recent', 'Recently edited']].map(([v, l]) => `<option value="${v}"${(U.tsort || 'due') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+    </div></div>
+    <div style="margin:-8px 0 18px">${designerPills()}</div>`;
+  if (!activeProjects().length) return head + `<div class="empty rise"><h2>Nothing here yet</h2><p>Open steps from each project’s current stage will show up here.</p><button class="btn pri press" data-act="newProject">${I.plus}New project</button></div>`;
+  const groups = LEVELS.slice().reverse().map((lv, gi) => {
+    const list = rows.filter(r => r.x.st.p === lv).sort(sorter);
+    const open = U.tgroups[lv] !== undefined ? U.tgroups[lv] : lv !== 'LOW';
+    const cnt = list.filter(r => !U.tleave[r.p.id + ':' + r.x.key]).length;
+    const body = !open ? '' : list.length ? `<div class="hscroll"><div class="tbody">${taskHead()}${list.map(r => taskRow(r)).join('')}</div></div>` : `<div class="gempty">Nothing ${PL[lv].toLowerCase()} right now.</div>`;
+    return `<section class="tgroup rise${open ? ' open' : ''}" style="animation-delay:${gi * 50}ms"><button class="dhead" data-act="tgroup" data-v="${lv}" aria-expanded="${open}">${I.chev()}<span class="pbtn tile-${lv}" style="pointer-events:none"><span class="bars lv-${lv}"><i class="on"></i><i class="${lv !== 'LOW' ? 'on' : ''}"></i><i class="${lv === 'URGENT' ? 'on' : ''}"></i></span></span><span style="font-size:15px;font-weight:600">${PL[lv]}</span><span class="mono" style="font-size:12px;color:var(--muted)">${cnt}</span></button>${body}</section>`;
+  }).join('');
+  return head + groups + (q && !rows.length ? `<div class="empty">No open tasks match “${esc(U.tsearch)}”.</div>` : '');
+}
+
+/* ============================================================
+   PAGE — Due Soon
+   ============================================================ */
+function pageDue() {
+  const days = Array.from({ length: 14 }, (_, i) => addDays(i));
+  const all = openSteps(r => !!r.x.st.due && daysFrom(r.x.st.due) <= 13 && dselOK(r.p));
+  const leavingRows = Object.keys(U.tleave).map(mk => { const [pid, k] = mk.split(':'); const p = S.projects[pid]; const x = p && getItem(p, k); return p && x && x.st.due ? { p, x, cs: curStage(p), upcoming: x.stage > curStage(p) } : null; }).filter(Boolean).filter(r => !all.some(a => a.p.id === r.p.id && a.x.key === r.x.key));
+  const rows = all.concat(leavingRows);
+  const sel = U.dueDay && days.includes(U.dueDay) ? U.dueDay : null;
+  const strip = `<div class="strip rise" role="group" aria-label="Next 14 days">${days.map((iso, i) => {
+    const d = parseISO(iso); const here = rows.filter(r => r.x.st.due === iso && !U.tleave[r.p.id + ':' + r.x.key]);
+    const wk = d.getDay() === 0 || d.getDay() === 6;
+    const dots = here.slice(0, 6).map(r => `<i class="sd-${r.x.st.p}"></i>`).join('') + (here.length > 6 ? `<span class="mono" style="font-size:9px">+${here.length - 6}</span>` : '');
+    return `<button class="scell press${i === 0 ? ' today' : ''}${wk ? ' wk' : ''}${sel === iso ? ' on' : ''}" data-act="dueDay" data-v="${iso}" aria-pressed="${sel === iso}" title="${fmtDay(iso)} · ${here.length} due"><span class="sw">${i === 0 ? 'Today' : WK[d.getDay()]}</span><span class="sn">${d.getDate()}</span><span class="sdots">${dots}</span></button>`;
+  }).join('')}</div>`;
+  const visible = sel ? rows.filter(r => r.x.st.due === sel) : rows;
+  const overdueN = rows.filter(r => daysFrom(r.x.st.due) < 0 && !U.tleave[r.p.id + ':' + r.x.key]).length;
+  const head = `<div class="phead"><div><div class="eyebrow">${overdueN ? overdueN + ' overdue · ' : ''}next 2 weeks</div><h1>Due Soon</h1></div>${sel ? `<button class="btn press" data-act="dueDay" data-v="">Show all</button>` : ''}</div>
+    <div style="margin:-8px 0 16px">${designerPills()}</div>`;
+  const G = [['over', 'Overdue', r => daysFrom(r.x.st.due) < 0, true], ['today', 'Today', r => daysFrom(r.x.st.due) === 0, true], ['tom', 'Tomorrow', r => daysFrom(r.x.st.due) === 1, true], ['week', 'This week', r => { const n = daysFrom(r.x.st.due); return n >= 2 && n <= 6; }, true], ['later', 'Later', r => daysFrom(r.x.st.due) >= 7, false]];
+  const sortD = (a, b) => (daysFrom(a.x.st.due) - daysFrom(b.x.st.due)) || (LEVELS.indexOf(b.x.st.p) - LEVELS.indexOf(a.x.st.p)) || a.p.name.localeCompare(b.p.name);
+  const groups = G.map(([id, label, f, defOpen], gi) => {
+    const list = visible.filter(f).sort(sortD);
+    if (!list.length && (id === 'over' || sel)) return '';
+    const open = U.dgroups[id] !== undefined ? U.dgroups[id] : defOpen;
+    const cnt = list.filter(r => !U.tleave[r.p.id + ':' + r.x.key]).length;
+    const body = !open ? '' : list.length ? `<div class="hscroll"><div class="tbody">${taskHead()}${list.map(r => taskRow(r, { showUpcoming: true, idp: 'd' })).join('')}</div></div>` : `<div class="gempty">Nothing due ${label.toLowerCase()}.</div>`;
+    return `<section class="tgroup rise${open ? ' open' : ''}${id === 'over' ? ' late' : ''}" style="animation-delay:${gi * 50}ms"><button class="dhead" data-act="dgroup" data-v="${id}" aria-expanded="${open}">${I.chev()}<span style="font-size:15px;font-weight:600${id === 'over' ? ';color:var(--urgent)' : ''}">${label}</span><span class="mono" style="font-size:12px;color:var(--muted)">${cnt}</span></button>${body}</section>`;
+  }).join('');
+  const empty = !rows.length ? `<div class="empty rise"><h2>Nothing due in the next two weeks</h2><p>Give a step a target date and it’ll show up here, whatever stage it’s in.</p></div>` : '';
+  return head + strip + (empty || groups);
+}
+
+/* ============================================================
+   PAGE — Dashboard
+   ============================================================ */
+function opsJobs() {
+  return activeProjects().filter(p => {
+    const items = projItems(p); const cs = curStage(p, items);
+    if (cs !== 4 && cs !== 5) return false;
+    const s25 = (p.steps || {}).w25, s26 = (p.steps || {}).w26;
+    return !((s25 && s25.s === 'N/A') || (s26 && s26.s === 'N/A'));
+  });
+}
+function pageDashboard() {
+  const h = new Date().getHours();
+  const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const dateLbl = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const first = firstName((designers()[0] || {}).name || 'Isaiah');
+  const dc = U.dash;
+  const head = `<div class="phead"><div><div class="eyebrow">${esc(dateLbl)}</div><h1>${greet}, ${esc(first)}.</h1></div>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px"><label><span class="sr">Search projects</span><input id="d-search" class="search" placeholder="Search projects" data-dsearch="1" autocomplete="off"></label><button class="btn pri press" data-act="newProject">${I.plus}New project</button></div></div>`;
+  if (!activeProjects().length) return head + `<div class="empty rise"><h2>Welcome to the new Green Screen</h2><p>Start your first project. Urgent steps, Operations and your recent projects will gather here.</p><button class="btn pri press" data-act="newProject">${I.plus}New project</button></div>`;
+  // urgent
+  const urg = openSteps(r => !r.upcoming && r.x.st.p === 'URGENT').concat(Object.keys(U.tleave).map(mk => { const [pid, k] = mk.split(':'); const p = S.projects[pid]; const x = p && getItem(p, k); return p && x && x.st.p === 'URGENT' && isClosed(x.st.s) ? { p, x, cs: curStage(p), upcoming: false } : null; }).filter(Boolean)).sort(byDue);
+  const urgN = urg.filter(r => !U.tleave[r.p.id + ':' + r.x.key]).length;
+  const tog = (id, label, extra) => `<button class="ctog press" data-act="dashToggle" data-v="${id}" aria-expanded="${!dc[id]}">${I.chev()}${extra || ''}<h2>${label}</h2></button>`;
+  const urgCard = `<section class="card dcard rise"><div class="dhd">${tog('u', 'Urgent', `<span class="pbtn tile-URGENT" style="pointer-events:none"><span class="bars lv-URGENT"><i class="on"></i><i class="on"></i><i class="on"></i></span></span>`)}<span class="mono" style="font-size:12px;color:var(--muted)">${urgN}</span><span style="font-size:12px;color:var(--muted)">· current stages only</span><a href="#/tasklist" class="dlink">Tasklist ›</a></div>
+    ${dc.u ? '' : `<div class="cbody">${urg.length ? `<div class="hscroll" style="padding:0 10px 8px"><div class="tbody">${taskHead()}${urg.map(r => taskRow(r, { idp: 'u' })).join('')}</div></div>` : `<div class="gempty" style="padding:4px 18px 18px">Nothing urgent right now.</div>`}</div>`}</section>`;
+  // operations snapshot
+  const jobs = opsJobs();
+  const proc = jobs.filter(p => curStage(p) === 4).filter(p => { const s = p.steps || {}; return !((s.w25 || {}).s === 'Done' && (s.w26 || {}).s === 'Done'); });
+  const installing = jobs.filter(p => curStage(p) === 5);
+  const scheduled = jobs.filter(p => curStage(p) === 4 && !proc.includes(p));
+  const sums = [[proc.length, 'to process', proc.length ? ' hot' : ''], [installing.length, 'installing now', ''], [scheduled.filter(p => p.installDate).length, 'scheduled', ''], [scheduled.filter(p => !p.installDate).length, 'not scheduled', '']];
+  const procRows = proc.length ? proc.map(p => {
+    const s = p.steps || {}; const d25 = (s.w25 || {}).s === 'Done', d26 = (s.w26 || {}).s === 'Done';
+    const soldAt = (s.w22 || {}).doneAt; const age = soldAt ? Math.max(0, -daysFrom(soldAt)) : null;
+    return `<div class="orow"><button class="ock press${d25 !== d26 ? ' half' : ''}" data-act="procBoth" data-pid="${p.id}" title="Mark steps 25 & 26 done" aria-label="Mark ${esc(p.name)} processed">${I.tick()}</button>
+      <span style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="display:flex;align-items:center;gap:7px;min-width:0"><span class="dot" style="width:7px;height:7px;background:${dColor(p.designer)}"></span><a href="#/project/${p.id}" class="clink" style="font-size:13px">${esc(p.name)}</a></span>
+      <span style="display:flex;gap:5px;flex-wrap:wrap"><button class="proc press${d25 ? ' on' : ''}" data-act="procOne" data-pid="${p.id}" data-k="w25" aria-pressed="${d25}"><span class="pk"></span>Crewplan &amp; pics</button><button class="proc press${d26 ? ' on' : ''}" data-act="procOne" data-pid="${p.id}" data-k="w26" aria-pressed="${d26}"><span class="pk"></span>Ops email</button></span></span>
+      <span class="mono ${age !== null && age >= 5 ? 'hot' : ''}" style="font-size:11.5px;align-self:start;padding-top:2px;color:${age !== null && age >= 5 ? 'var(--urgent)' : 'var(--muted)'}" title="${age === null ? 'Sold date not recorded' : 'Sold ' + age + ' days ago'}">${age === null ? '—' : age + 'd'}</span></div>`;
+  }).join('') : `<div class="gempty" style="padding:8px 16px 12px">All sold jobs are processed.</div>`;
+  const instList = installing.concat(scheduled);
+  const instRows = instList.length ? instList.map(p => {
+    const now = curStage(p) === 5; const ids = now ? [34, 35, 36, 37, 38] : [27, 28, 29, 30, 31, 32, 33];
+    const done = ids.filter(n => ((p.steps || {})['w' + n] || {}).s === 'Done' || ((p.steps || {})['w' + n] || {}).s === 'N/A').length;
+    const date = p.installDate ? (daysFrom(p.installDate) === 0 ? 'Today' : MO[parseISO(p.installDate).getMonth()] + ' ' + parseISO(p.installDate).getDate()) : (now ? 'Now' : 'Not set');
+    const warn = !now && p.installDate && daysFrom(p.installDate) <= 3 && done < ids.length;
+    return `<button class="irow" data-act="goOps" title="Open in Operations"><span style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}${now ? '<span class="nowtag">NOW</span>' : ''}</span><span style="font-size:11.5px;color:var(--muted)">${esc(p.crew || 'No crew leader yet')}</span></span><span class="mono" style="font-size:11.5px;color:var(--${warn ? 'urgent' : now ? 'prog' : 'muted'})">${date}</span><span class="progbtn${done === ids.length ? ' done' : warn ? ' warn' : ''}"><span class="pbar2"><i style="width:${Math.round(done / ids.length * 100)}%"></i></span><span class="pnum">${done}/${ids.length}</span><span>${now ? 'Install' : 'Pre-install'}</span></span></button>`;
+  }).join('') : `<div class="gempty" style="padding:8px 16px 12px">No jobs past processing yet.</div>`;
+  const opsCard = `<section class="card dcard rise" style="animation-delay:70ms"><div class="dhd">${tog('o', 'Operations', `<span style="color:var(--muted);display:flex">${I.truck(15)}</span>`)}<span class="sums">${sums.map(([n, l, c]) => `<span class="sum${c}"><b>${n}</b>${l}</span>`).join('')}</span><button class="dlink press" data-act="goOps">Big board ›</button></div>
+    ${dc.o ? '' : `<div class="cbody opsgrid"><div class="opscol"><div class="olabel">Needs processing</div>${procRows}</div><div class="opscol"><div class="olabel">Installs</div>${instRows}</div></div>`}</section>`;
+  // recently edited (one row)
+  const recent = activeProjects().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 16);
+  const recCard = `<section class="drawer rise" style="animation-delay:140ms;margin-top:18px"><div class="dhd" style="padding:12px 16px">${tog('r', 'Recently edited')}<a href="#/projects" class="dlink">All projects ›</a></div>
+    ${dc.r ? '' : `<div class="fgrid onerow" id="recent-row">${recent.map(p => folderHtml(p, { noActs: true })).join('')}</div>`}</section>`;
+  return head + `<div style="display:flex;flex-direction:column;gap:18px">${urgCard}${opsCard}</div>` + recCard;
+}
+function fitRecentRow() {
+  const row = document.getElementById('recent-row'); if (!row) return;
+  const kids = [...row.children]; if (!kids.length) return;
+  kids.forEach(k => { k.style.display = ''; });
+  const w = row.clientWidth - 28; const cols = Math.max(1, Math.floor((w + 12) / (196 + 12)));
+  row.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+  kids.forEach((k, i) => { k.style.display = i < cols ? '' : 'none'; });
+}
+window.addEventListener('resize', () => { if (U.route.page === 'dashboard') fitRecentRow(); });
+function procSet(pid, patch, label) {
+  const p = S.projects[pid]; if (!p) return;
+  mutate(pid, q => { Object.entries(patch).forEach(([k, v]) => setItem(q, k, { s: v ? 'Done' : 'Not Started', doneAt: v ? todayISO() : '' })); }, label);
+}
+
+/* ============================================================
+   PAGE — Workflow (template editor)
+   ============================================================ */
+function pageWorkflow() {
+  const wf = S.workflow;
+  const head = `<div class="phead"><div><div class="eyebrow">${wf.length} steps · 7 stages · changes apply to every project</div><h1>Workflow</h1></div></div>`;
+  const stages = STAGES.map((name, si) => {
+    const list = wf.map((w, i) => ({ w, n: i + 1 })).filter(r => r.w.stage === si);
+    const open = U.wopen[si] !== undefined ? U.wopen[si] : true;
+    const src = si === 5 ? '<span class="badge custom">CUSTOM STAGE · NOT IN PIPEDRIVE</span>' : '<span style="font-size:12px;color:var(--muted)">Pipedrive stage</span>';
+    const rows = list.map(({ w, n }, j) => `<div class="step wrow-grid${U.wdrag === w.id ? ' dragging' : ''}" data-wid="${w.id}" data-stage="${si}" draggable="true">
+      <span class="grip" title="Drag to reorder" aria-hidden="true">${svg(14, '<circle cx="9" cy="6" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="18" r="1"></circle>', 2.4)}</span>
+      <span class="snum">${n}</span>
+      <label style="min-width:0"><span class="sr">Step title</span><input class="wedit wtitle" id="wt-${w.id}" value="${esc(w.title)}" data-wcommit="title" data-wid="${w.id}" autocomplete="off"></label>
+      <label style="min-width:0"><span class="sr">Detail</span><input class="wedit" id="wd-${w.id}" value="${esc(w.detail)}" placeholder="Add detail" data-wcommit="detail" data-wid="${w.id}" autocomplete="off"></label>
+      <button class="opt press${w.optional ? ' on' : ''}" data-act="wopt" data-wid="${w.id}" aria-pressed="${!!w.optional}" title="Optional steps don’t count toward progress">Optional</button>
+      <span class="tools"><button class="ibtn press" data-act="wmove" data-wid="${w.id}" data-v="-1" title="Move up" ${j === 0 ? 'disabled' : ''}>${I.up}</button><button class="ibtn press" data-act="wmove" data-wid="${w.id}" data-v="1" title="Move down" ${j === list.length - 1 ? 'disabled' : ''}>${I.dn}</button><button class="ibtn del press" data-act="wdel" data-wid="${w.id}" title="Delete from every project">${I.trash()}</button></span>
+    </div>`).join('');
+    return `<section class="stage rise${open ? ' open' : ''}" style="animation-delay:${si * 40}ms"><div class="shead" data-act="wstage" data-i="${si}" role="button" tabindex="0" aria-expanded="${open}">${I.chev()}<span class="sname">${name}</span>${src}<span class="mono" style="font-size:12px;color:var(--muted);margin-left:auto">${list.length} steps</span></div>
+      ${open ? `<div class="sbody"><div class="colhead wrow-grid"><span></span><span>#</span><span>Title</span><span>Detail</span><span></span><span></span></div><div data-dropstage="${si}">${rows}</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 10px 2px;border-top:1px solid var(--line)"><span style="width:22px;display:grid;place-items:center;color:var(--muted)">${I.plus}</span><label style="flex:1;display:flex"><span class="sr">Add a step to ${name}</span><input id="wadd-${si}" class="addin" placeholder="Add step to ${name} — press Enter" data-wadd="${si}" autocomplete="off"></label></div></div>` : ''}</section>`;
+  }).join('');
+  return head + `<div style="display:flex;flex-direction:column;gap:10px">${stages}</div>`;
+}
+/* workflow edits — snapshot workflow (+ any projects touched) for Undo */
+function wfChange(fn, label, touchProjects) {
+  const beforeWf = clone(S.workflow);
+  const beforeP = {};
+  const wf = clone(S.workflow);
+  const changed = fn(wf) || [];
+  putMeta('workflow', wf);
+  (touchProjects ? changed : []).forEach(({ before, after }) => { beforeP[before.id] = before; putProject(after, { keepTime: true }); });
+  if (label) pushUndo(label, () => { putMeta('workflow', beforeWf); Object.values(beforeP).forEach(p => putProject(p, { keepTime: true })); });
+}
+function wfAdd(si, title, fromCustom) {
+  const id = 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  wfChange(wf => {
+    let at = -1; wf.forEach((w, i) => { if (w.stage === si) at = i; });
+    if (at < 0) at = wf.findIndex(w => w.stage > si) - 1;
+    wf.splice(at + 1, 0, { id, stage: si, title, detail: '', optional: false });
+    const out = [];
+    Object.values(S.projects).forEach(p => {
+      const cs = curStage(p);
+      if (fromCustom && p.id === fromCustom.pid) {
+        const before = clone(p); const after = clone(p); const c = (after.custom || []).find(c => c.id === fromCustom.cid);
+        after.custom = (after.custom || []).filter(x => x.id !== fromCustom.cid);
+        if (c) { after.steps = after.steps || {}; after.steps[id] = { s: c.s, p: c.p, due: c.due, note: c.note, dis: c.dis || false, doneAt: c.doneAt || '' }; }
+        out.push({ before, after });
+      } else if (cs > si) {
+        const before = clone(p); const after = clone(p); after.steps = after.steps || {}; after.steps[id] = Object.assign({}, DEF_ST, { s: 'Done', doneAt: todayISO() });
+        out.push({ before, after });
+      }
+    });
+    return out;
+  }, fromCustom ? '“' + title + '” added to the template' : '“' + title + '” added to ' + STAGES[si], true);
+}
+function wfCommit(el) {
+  const id = el.dataset.wid, f = el.dataset.wcommit; const w = S.workflow.find(x => x.id === id); if (!w) return;
+  const v = el.value.trim();
+  if (f === 'title' && !v) { el.value = w.title; return; }
+  if ((w[f] || '') === v) return;
+  wfChange(wf => { wf.find(x => x.id === id)[f] = v; }, f === 'title' ? 'Step renamed to “' + v + '”' : 'Detail updated');
 }
 
 /* ============================================================
@@ -713,8 +973,8 @@ function npCreate() {
    ACTIONS — project page
    ============================================================ */
 function curP() { return S.projects[U.route.id]; }
-function toggleStep(k) {
-  const p = curP(); if (!p) return;
+function toggleStep(k, p) {
+  p = p || curP(); if (!p) return;
   const x = getItem(p, k); if (!x) return;
   const done = x.st.s === 'Done';
   const before = curStage(p);
@@ -808,7 +1068,8 @@ function commitField(el) {
 app.addEventListener('focusout', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.commit) { U.busy = false; commitField(el); }
-  if (pendingRender && !(document.activeElement && document.activeElement.dataset && document.activeElement.dataset.commit)) { pendingRender = false; render(); }
+  if (el.dataset && el.dataset.wcommit) { U.busy = false; wfCommit(el); }
+  const ae = document.activeElement; if (pendingRender && !(ae && ae.dataset && (ae.dataset.commit || ae.dataset.wcommit))) { pendingRender = false; render(); }
 });
 app.addEventListener('focusin', (e) => { if (e.target.dataset && e.target.dataset.commit) U.busy = false; });
 
@@ -824,6 +1085,9 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { const p = S.projects[t.dataset.id || U.route.id]; if (p) t.value = p[t.dataset.commit] || ''; }
     e.preventDefault(); t.blur(); return;
   }
+  if (t.dataset && t.dataset.dsearch && e.key === 'Enter') { e.preventDefault(); U.search = t.value; location.hash = '#/projects'; return; }
+  if (t.dataset && t.dataset.wcommit && (e.key === 'Enter' || e.key === 'Escape')) { if (e.key === 'Escape') { const w = S.workflow.find(x => x.id === t.dataset.wid); if (w) t.value = w[t.dataset.wcommit] || ''; } e.preventDefault(); t.blur(); return; }
+  if (t.dataset && t.dataset.wadd !== undefined && e.key === 'Enter') { e.preventDefault(); const v = t.value.trim(); if (!v) return; const si = Number(t.dataset.wadd); wfAdd(si, v); setTimeout(() => { const el = document.getElementById('wadd-' + si); if (el) { el.value = ''; el.focus(); } }, 0); return; }
   if (t.dataset && t.dataset.add !== undefined && e.key === 'Enter') {
     e.preventDefault();
     const v = t.value.trim(); if (!v) return;
@@ -834,7 +1098,7 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (t.classList && t.classList.contains('folder') && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openFolder(t); return; }
-  if (t.classList && t.classList.contains('shead') && (e.key === 'Enter' || e.key === ' ') && t === e.target) { e.preventDefault(); toggleStage(Number(t.dataset.i)); return; }
+  if (t.classList && t.classList.contains('shead') && (e.key === 'Enter' || e.key === ' ') && t === e.target) { e.preventDefault(); if (t.dataset.act === 'wstage') t.click(); else toggleStage(Number(t.dataset.i)); return; }
   if (!inField && (e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); doUndo(); }
 });
 
@@ -852,15 +1116,43 @@ document.addEventListener('input', (e) => {
     return;
   }
   if (t.dataset && t.dataset.input === 'search') { U.search = t.value; render(); }
+  if (t.dataset && t.dataset.input === 'tsearch') { U.tsearch = t.value; render(); }
+  if (t.dataset && t.dataset.wcommit) U.busy = true;
   if (t.dataset && t.dataset.commit) U.busy = true;
 });
 document.addEventListener('change', (e) => {
   const t = e.target;
   if (t.dataset && t.dataset.change === 'sort') { U.sort = t.value; lsSet(LS.sort, U.sort); render(); }
-  if (t.dataset && t.dataset.change === 'pickDue' && t.value) { const p = curP(); const k = t.dataset.k; const x = p && getItem(p, k); U.menu = null; if (x) mutate(p.id, q => setItem(q, k, { due: t.value }), 'Target date set to ' + fmtDay(t.value)); }
+  if (t.dataset && t.dataset.change === 'tsort') { U.tsort = t.value; lsSet('gs5:tsort', U.tsort); render(); }
+  if (t.dataset && t.dataset.change === 'pickDue' && t.value) { const p = (t.dataset.pid && S.projects[t.dataset.pid]) || curP(); const k = t.dataset.k; const x = p && getItem(p, k); U.menu = null; if (x) mutate(p.id, q => setItem(q, k, { due: t.value }), 'Target date set to ' + fmtDay(t.value)); }
 });
 app.addEventListener('mouseover', (e) => { const b = e.target.closest('[data-seg]'); if (b) previewSeg(Number(b.dataset.seg)); });
 app.addEventListener('mouseout', (e) => { const b = e.target.closest('[data-seg]'); if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('#segrow'))) previewSeg(null); });
+
+app.addEventListener('dragstart', (e) => {
+  const row = e.target.closest && e.target.closest('[data-wid][draggable]'); if (!row) return;
+  if (/^(INPUT|BUTTON)$/.test(e.target.tagName)) { e.preventDefault(); return; }
+  U.wdrag = row.dataset.wid; row.classList.add('dragging');
+  try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', U.wdrag); } catch (x) {}
+});
+app.addEventListener('dragover', (e) => {
+  if (!U.wdrag) return; const row = e.target.closest && e.target.closest('[data-wid]'); if (!row) return;
+  const src = S.workflow.find(w => w.id === U.wdrag); if (!src || Number(row.dataset.stage) !== src.stage) return;
+  e.preventDefault();
+  document.querySelectorAll('.dropabove,.dropbelow').forEach(n => n.classList.remove('dropabove', 'dropbelow'));
+  if (row.dataset.wid === U.wdrag) return;
+  const r = row.getBoundingClientRect(); row.classList.add(e.clientY < r.top + r.height / 2 ? 'dropabove' : 'dropbelow');
+});
+app.addEventListener('drop', (e) => {
+  if (!U.wdrag) return; const row = e.target.closest && e.target.closest('[data-wid]'); e.preventDefault();
+  const from = U.wdrag; U.wdrag = null;
+  document.querySelectorAll('.dropabove,.dropbelow,.dragging').forEach(n => n.classList.remove('dropabove', 'dropbelow', 'dragging'));
+  if (!row || row.dataset.wid === from) return;
+  const r = row.getBoundingClientRect(); const after = e.clientY >= r.top + r.height / 2; const to = row.dataset.wid;
+  const w = S.workflow.find(x => x.id === from);
+  wfChange(wf => { const i = wf.findIndex(x => x.id === from); const item = wf.splice(i, 1)[0]; let j = wf.findIndex(x => x.id === to); if (after) j++; wf.splice(j, 0, item); }, '“' + w.title + '” moved');
+});
+app.addEventListener('dragend', () => { U.wdrag = null; document.querySelectorAll('.dropabove,.dropbelow,.dragging').forEach(n => n.classList.remove('dropabove', 'dropbelow', 'dragging')); });
 
 function toggleStage(si) {
   const p = curP(); if (!p) return; const key = p.id + ':' + si; const cs = curStage(p);
@@ -894,7 +1186,7 @@ document.addEventListener('click', (e) => {
   if (stop && (!a || a.contains(stop))) return;
   if (!a) { if (U.menu && !t.closest('.smenu')) { U.menu = null; render(); } return; }
   const act = a.dataset.act, k = a.dataset.k, v = a.dataset.v;
-  const p = curP();
+  const p = (a.dataset.pid && S.projects[a.dataset.pid]) || curP();
   const closeMenu = () => { U.menu = null; };
   switch (act) {
     case 'undo': doUndo(); break;
@@ -912,8 +1204,8 @@ document.addEventListener('click', (e) => {
     case 'deleteFolder': removeFolder(a.dataset.id, 'gone'); break;
     case 'menu': { const m = { kind: a.dataset.kind, key: a.dataset.key }; U.menu = U.menu && U.menu.kind === m.kind && U.menu.key === m.key ? null : m; render(); break; }
     case 'setDesigner': closeMenu(); if (p && p.designer !== v) mutate(p.id, q => { q.designer = v; }, 'Designer changed to ' + designer(v).name); else render(); break;
-    case 'toggle': toggleStep(k); break;
-    case 'setStatus': closeMenu(); if (p) { const x = getItem(p, k); const before = curStage(p); if (x && x.st.s !== v) { mutate(p.id, q => setItem(q, k, { s: v, doneAt: v === 'Done' ? todayISO() : '' }), '“' + x.title + '” · ' + v); const after = curStage(S.projects[p.id]); if (after !== before) { U.open[p.id + ':' + after] = true; render(); } } else render(); } break;
+    case 'toggle': toggleStep(k, p); break;
+    case 'setStatus': closeMenu(); if (p && v === 'Done' && U.route.page !== 'project') { listComplete(p.id, k); break; } if (p) { const x = getItem(p, k); const before = curStage(p); if (x && x.st.s !== v) { mutate(p.id, q => setItem(q, k, { s: v, doneAt: v === 'Done' ? todayISO() : '' }), '“' + x.title + '” · ' + v); const after = curStage(S.projects[p.id]); if (after !== before) { U.open[p.id + ':' + after] = true; render(); } } else render(); } break;
     case 'setPri': closeMenu(); if (p) { const x = getItem(p, k); if (x && x.st.p !== v) mutate(p.id, q => setItem(q, k, { p: v }), '“' + x.title + '” · ' + PL[v] + ' priority'); else render(); } break;
     case 'raise': closeMenu(); if (p) { const x = getItem(p, k); const sgx = suggestion(x); const nv = sgx ? sgx.target : LEVELS[Math.min(LEVELS.indexOf(x.st.p) + 1, 2)]; mutate(p.id, q => setItem(q, k, { p: nv }), '“' + x.title + '” raised to ' + PL[nv]); } break;
     case 'dismiss': closeMenu(); if (p) { const sgx = suggestion(getItem(p, k)); mutate(p.id, q => setItem(q, k, { dis: sgx ? sgx.target : 'URGENT' })); } break;
@@ -933,6 +1225,19 @@ document.addEventListener('click', (e) => {
     case 'theme': U.theme = v; lsSet(LS.theme, v); render(); renderToast(); break;
     case 'motion': U.motion = !U.motion; lsSet(LS.motion, U.motion); render(); break;
     case 'backup': downloadBackup(); break;
+    case 'dsel': U.dsel = v; lsSet('gs5:dsel', v); render(); break;
+    case 'tgroup': { const o = U.tgroups[v] !== undefined ? U.tgroups[v] : v !== 'LOW'; U.tgroups[v] = !o; render(); break; }
+    case 'dgroup': { const o = U.dgroups[v] !== undefined ? U.dgroups[v] : v !== 'later'; U.dgroups[v] = !o; render(); break; }
+    case 'dueDay': U.dueDay = !v || U.dueDay === v ? null : v; render(); break;
+    case 'tcheck': listComplete(a.dataset.pid, k); break;
+    case 'procBoth': if (p) procSet(p.id, { w25: true, w26: true }, p.name + ' processed · steps 25–26 checked'); break;
+    case 'procOne': if (p) { const cur = ((p.steps || {})[k] || {}).s === 'Done'; procSet(p.id, { [k]: !cur }, (k === 'w25' ? 'Crewplan & pics' : 'Ops email') + (cur ? ' unchecked' : ' checked') + ' · ' + p.name); } break;
+    case 'dashToggle': U.dash[v] = !U.dash[v]; lsSet('gs5:dash', U.dash); render(); break;
+    case 'wstage': { const si = Number(a.dataset.i); const o = U.wopen[si] !== undefined ? U.wopen[si] : true; U.wopen[si] = !o; render(); break; }
+    case 'wopt': { const id = a.dataset.wid; const w = S.workflow.find(x => x.id === id); wfChange(wf => { const t = wf.find(x => x.id === id); t.optional = !t.optional; }, '“' + w.title + '” ' + (w.optional ? 'now counts toward progress' : 'marked optional')); break; }
+    case 'wmove': { const id = a.dataset.wid; wfChange(wf => { const i = wf.findIndex(x => x.id === id); const st = wf[i].stage; const dir = Number(v); let j = i + dir; while (j >= 0 && j < wf.length && wf[j].stage !== st) j += dir; if (j < 0 || j >= wf.length) return; [wf[i], wf[j]] = [wf[j], wf[i]]; }, null); break; }
+    case 'wdel': { const id = a.dataset.wid; const w = S.workflow.find(x => x.id === id); wfChange(wf => { const i = wf.findIndex(x => x.id === id); wf.splice(i, 1); }, '“' + w.title + '” removed from the template'); break; }
+    case 'toTemplate': if (p) { const x = getItem(p, k); if (x) wfAdd(x.stage, x.title, { pid: p.id, cid: k }); } break;
   }
 });
 
@@ -969,9 +1274,9 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 /* ============================================================
    BOOT
    ============================================================ */
-if (!location.hash) history.replaceState(null, '', '#/projects');
+if (!location.hash) history.replaceState(null, '', '#/dashboard');
 U.route = parseRoute();
 render();
 renderToast();
 initCloud();
-window.GS = { S, U, render, version: APP_VERSION };
+window.GS = { S, U, render, putProject, version: APP_VERSION };

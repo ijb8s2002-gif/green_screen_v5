@@ -1,4 +1,4 @@
-# Green Screen v5 — setup & upload guide (round 1)
+# Green Screen v5 — setup & upload guide
 
 This is the brand-new Green Screen. It starts empty, keeps nothing from the old app, and saves to the cloud automatically. The old app at `/green_screen_v4/` keeps working exactly as before.
 
@@ -21,7 +21,7 @@ This is the brand-new Green Screen. It starts empty, keeps nothing from the old 
 4. Leave everything else unchecked and click **Create repository**.
 
 ## 2. Upload the files
-1. Unzip `green-screen-v5-round1.zip` on your computer.
+1. Unzip the latest `green-screen-v5-round….zip` on your computer.
 2. In the new repo, click **uploading an existing file**, or **Add file → Upload files**.
 3. Open the unzipped folder, select **everything inside it** (including the `icons` folder) and drag it onto the GitHub page. Drag the contents, not the outer folder itself.
 4. Check that `icons/` appears in the upload list with 6 files.
@@ -84,4 +84,26 @@ The new app shows the sprout icon on green. Your old app keeps its dark "G" icon
   - The "Archive?" prompt after Project Install.
 - **Settings (partial):** appearance, sync status and Download backup.
 
-**Coming next.** Round 2: Dashboard, Tasklist, Due Soon, Workflow. Round 3: Operations with the ops email builder, Archived with the 14-day cleanout, the rest of Settings (designers, crew leaders, Restore).
+## What round 2 adds
+- **Dashboard (the new home page):**
+  - The greeting follows the time of day.
+  - **Urgent** card: every Urgent step from each project's current stage, in the same rows as the Tasklist.
+  - **Operations** snapshot: sold jobs that need processing, with Crewplan / Ops email pills, and installs with their progress.
+  - **Recently edited:** one row of folders that fits your screen.
+  - Each card folds up, and the app remembers what you folded.
+- **Tasklist:**
+  - Open steps from each project's current stage, grouped Urgent / Medium / Low.
+  - Designer filter, search and sort.
+  - Edit status, priority, date and PO# right in the row.
+  - Check a step off and it slides away, with Undo.
+  - The Stage cell links to Operations for those stages; steps 25 and 26 have PROCESSING › / OPS EMAIL › tags.
+- **Due Soon:**
+  - Everything with a target date in the next 2 weeks, plus overdue, from any stage. Steps from a stage that isn't current yet get an UPCOMING STAGE tag.
+  - Grouped Overdue / Today / Tomorrow / This week / Later.
+  - A 14-day strip with priority dots: click a day to filter to it.
+- **Workflow:**
+  - Edit the template for every project: rename steps and details in place, add steps, drag or use ↑ ↓ to reorder, mark steps optional, delete.
+  - A step added to a stage a project has already finished is marked Done on that project automatically.
+- **Add to template:** on a project-only step, the new template icon promotes it to the Workflow for every project.
+
+**Coming in round 3:** Operations (big board, install schedule, crew leaders, the ops email builder), Archived with the 14-day cleanout, and the rest of Settings (designers, crew leaders, Restore).
