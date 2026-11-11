@@ -389,9 +389,11 @@ h2{margin:0;font-size:15px;font-weight:600}
 .sw{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .sn{font-family:'Geist Mono',monospace;font-size:15px;color:var(--ink)}
 .sdots{display:flex;gap:2px;flex-wrap:wrap;justify-content:center;min-height:6px;max-width:100%}
-.sdots i{width:6px;height:6px;border-radius:99px;display:block}
-.sd-URGENT{background:var(--urgent)}.sd-MEDIUM{background:var(--medium)}.sd-LOW{background:var(--muted);opacity:.6}
-.scell.on .sdots i{box-shadow:0 0 0 1.5px var(--accentInk)}
+.sdots{display:flex;gap:3px;justify-content:center;align-items:center;flex-wrap:nowrap;height:6px;min-height:6px}
+.sdots i{flex:none;width:5px;height:5px;border-radius:99px;display:block;background:var(--muted);opacity:.75}
+.sdmore{font-family:'Geist Mono',monospace;font-size:9px;line-height:1;color:var(--muted)}
+.scell.on .sdots i{background:var(--accentInk);opacity:.9}
+.scell.on .sdmore{color:var(--accentInk)}
 
 /* ---------- dashboard ---------- */
 .dcard{overflow:visible}
@@ -465,6 +467,15 @@ h2{margin:0;font-size:15px;font-weight:600}
   .wrow-grid>:nth-child(2),.wrow-grid>:nth-child(4),.wrow-grid>:nth-child(5),.colhead.wrow-grid{display:none!important}
 }
 
+.cgrip{opacity:0;margin-left:-4px;flex:none}
+.step:hover .cgrip{opacity:.6}
+/* touch screens (iPad, phone): show the tools that otherwise appear on hover */
+@media (hover:none){
+  .step .tools,.facts,.step .cgrip{opacity:1!important;transform:none!important}
+  .step .opt{opacity:1}
+  .duebtn.empty{opacity:.55}
+  .poedit::placeholder{opacity:.5}
+}
 /* ---------- update banner ---------- */
 .upd{position:fixed;right:20px;bottom:20px;z-index:95;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadowHover);font-size:13px}
 

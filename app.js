@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.0.5-r2';
+const APP_VERSION = '5.0.6-r2';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -229,6 +229,7 @@ const designers = () => S.settings.designers || [];
 const designer = (id) => designers().find(d => d.id === id) || { id, name: 'Unassigned', color: 'slate' };
 const dColor = (id) => 'var(--c-' + designer(id).color + ')';
 const firstName = (n) => String(n || '').split(' ')[0];
+const shortName = (n) => String(n || '').replace(/\s+residence\s*$/i, '').trim() || String(n || '');
 const DEF_ST = { s: 'Not Started', p: 'LOW', due: '', note: '', dis: false };
 const isClosed = (s) => s === 'Done' || s === 'N/A';
 
@@ -636,7 +637,8 @@ function rowHtml(p, x) {
   const procBtn = isProc ? `<button class="opslink sm press" data-act="goOps" title="${x.n === 26 ? 'Write the ops email on Operations' : 'Processing step · open Operations'}">${x.n === 26 ? 'EMAIL ›' : 'OPS ›'}</button>` : '';
   const noteIc = st.note ? `<span class="noteic" title="Has a note">${I.note}</span>` : '';
   const tag = x.kind === 'c' ? '<span class="ptag">THIS PROJECT</span>' : '';
-  const titleCell = `<span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="stitle" data-act="expand" data-pid="${p.id}" data-k="${k}" title="${esc(x.title)}">${esc(x.title)}</span>${tag}${noteIc}</span>`;
+  const grip = x.kind === 'c' ? `<span class="grip cgrip" title="Drag to reorder" aria-hidden="true">${svg(14, '<circle cx="9" cy="6" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="18" r="1"></circle>', 2.4)}</span>` : '';
+  const titleCell = `<span style="display:flex;align-items:center;gap:8px;min-width:0">${grip}<span class="stitle" data-act="expand" data-pid="${p.id}" data-k="${k}" title="${esc(x.title)}">${esc(x.title)}</span>${tag}${noteIc}</span>`;
   // tools
   let tools = '';
   if (x.kind === 'c') {
@@ -645,7 +647,7 @@ function rowHtml(p, x) {
   }
   const toolsCell = `<span class="toolcell" style="display:flex;align-items:center;gap:4px;justify-content:flex-end">${procBtn}<span class="tools">${tools}</span></span>`;
   const exp = U.expanded[mk] ? `<div class="sexp">${x.detail ? `<span>${esc(x.detail)}</span>` : ''}<label style="display:block"><span class="sr">Note</span><textarea id="note-${k}" class="note" rows="2" placeholder="Add a note for this project…" data-commit="note" data-pid="${p.id}" data-k="${k}">${esc(st.note)}</textarea></label></div>` : '';
-  return `<div class="${cls}" style="--d:${delay}ms" data-pid="${p.id}" data-k="${k}"><button class="check press" data-act="toggle" data-pid="${p.id}" data-k="${k}" aria-label="${st.s === 'Done' ? 'Mark not done' : 'Mark done'}">${I.tick()}</button><span class="snum">${x.n || ''}</span>${titleCell}${toolsCell}${due}${pri}${status}${exp}</div>`;
+  return `<div class="${cls}" style="--d:${delay}ms" data-pid="${p.id}" data-k="${k}"${x.kind === 'c' ? ` data-cid="${k}" data-stage="${x.stage}" draggable="true"` : ''}><button class="check press" data-act="toggle" data-pid="${p.id}" data-k="${k}" aria-label="${st.s === 'Done' ? 'Mark not done' : 'Mark done'}">${I.tick()}</button><span class="snum">${x.n || ''}</span>${titleCell}${toolsCell}${due}${pri}${status}${exp}</div>`;
 }
 
 /* ============================================================
@@ -683,7 +685,7 @@ function taskRow(r, opts = {}) {
   return `<div class="${cls}" data-mk="${mk}">
     <button class="check press" data-act="tcheck" data-pid="${p.id}" data-k="${k}" aria-label="Mark done">${I.tick()}</button>
     ${pri}
-    <span class="pathcell"><a href="#/project/${p.id}" class="clink" title="Open ${esc(p.name)}">${esc(p.name)}</a><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex:none;color:var(--muted)"><path d="M9 6l6 6-6 6"></path></svg><span class="stitle" title="${esc(x.title)}">${esc(x.title)}</span>${tags}</span>
+    <span class="pathcell"><a href="#/project/${p.id}" class="clink" title="Open ${esc(p.name)}">${esc(shortName(p.name))}</a><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex:none;color:var(--muted)"><path d="M9 6l6 6-6 6"></path></svg><span class="stitle" title="${esc(x.title)}">${esc(x.title)}</span>${tags}</span>
     <span style="display:flex;align-items:center">${status}</span>
     ${stageCell}
     <span class="tcell" style="display:flex;align-items:center;gap:6px"><span class="dot" style="width:7px;height:7px;background:var(--c-${d.color})"></span><span style="overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</span></span>
@@ -743,8 +745,8 @@ function pageDue() {
   const strip = `<div class="strip rise" role="group" aria-label="Next 14 days">${days.map((iso, i) => {
     const d = parseISO(iso); const here = rows.filter(r => r.x.st.due === iso && !U.tleave[r.p.id + ':' + r.x.key]);
     const wk = d.getDay() === 0 || d.getDay() === 6;
-    const dots = here.slice(0, 6).map(r => `<i class="sd-${r.x.st.p}"></i>`).join('') + (here.length > 6 ? `<span class="mono" style="font-size:9px">+${here.length - 6}</span>` : '');
-    return `<button class="scell press${i === 0 ? ' today' : ''}${wk ? ' wk' : ''}${sel === iso ? ' on' : ''}" data-act="dueDay" data-v="${iso}" aria-pressed="${sel === iso}" title="${fmtDay(iso)} · ${here.length} due"><span class="sw">${i === 0 ? 'Today' : WK[d.getDay()]}</span><span class="sn">${d.getDate()}</span><span class="sdots">${dots}</span></button>`;
+    const dots = here.length > 6 ? `<i></i><i></i><i></i><span class="sdmore">+${here.length - 3}</span>` : here.map(() => '<i></i>').join('');
+    return `<button class="scell press${i === 0 ? ' today' : ''}${wk ? ' wk' : ''}${sel === iso ? ' on' : ''}" data-act="dueDay" data-v="${iso}" aria-pressed="${sel === iso}" title="${fmtDay(iso)} · ${here.length} ${here.length === 1 ? 'step' : 'steps'} due" aria-label="${fmtDay(iso)}, ${here.length} due"><span class="sw">${i === 0 ? 'Today' : WK[d.getDay()]}</span><span class="sn">${d.getDate()}</span><span class="sdots">${dots}</span></button>`;
   }).join('')}</div>`;
   const visible = sel ? rows.filter(r => r.x.st.due === sel) : rows;
   const overdueN = rows.filter(r => daysFrom(r.x.st.due) < 0 && !U.tleave[r.p.id + ':' + r.x.key]).length;
@@ -788,7 +790,7 @@ function pageDashboard() {
   const urg = openSteps(r => !r.upcoming && r.x.st.p === 'URGENT').concat(Object.keys(U.tleave).map(mk => { const [pid, k] = mk.split(':'); const p = S.projects[pid]; const x = p && getItem(p, k); return p && x && x.st.p === 'URGENT' && isClosed(x.st.s) ? { p, x, cs: curStage(p), upcoming: false } : null; }).filter(Boolean)).sort(byDue);
   const urgN = urg.filter(r => !U.tleave[r.p.id + ':' + r.x.key]).length;
   const tog = (id, label, extra) => `<button class="ctog press" data-act="dashToggle" data-v="${id}" aria-expanded="${!dc[id]}">${I.chev()}${extra || ''}<h2>${label}</h2></button>`;
-  const urgCard = `<section class="card dcard rise"><div class="dhd">${tog('u', 'Urgent', `<span class="pbtn tile-URGENT" style="pointer-events:none"><span class="bars lv-URGENT"><i class="on"></i><i class="on"></i><i class="on"></i></span></span>`)}<span class="mono" style="font-size:12px;color:var(--muted)">${urgN}</span><span style="font-size:12px;color:var(--muted)">· current stages only</span><a href="#/tasklist" class="dlink">Tasklist ›</a></div>
+  const urgCard = `<section class="card dcard rise"><div class="dhd">${tog('u', 'Urgent', `<span class="pbtn tile-URGENT" style="pointer-events:none"><span class="bars lv-URGENT"><i class="on"></i><i class="on"></i><i class="on"></i></span></span>`)}<span class="mono" style="font-size:12px;color:var(--muted)">${urgN}</span><span style="font-size:12px;color:var(--muted)">· current stages only</span><button class="dlink press" data-act="navx" data-v="#/tasklist">Tasklist ›</button></div>
     ${dc.u ? '' : `<div class="cbody">${urg.length ? `<div class="hscroll" style="padding:0 10px 8px"><div class="tbody">${taskHead()}${urg.map(r => taskRow(r, { idp: 'u' })).join('')}</div></div>` : `<div class="gempty" style="padding:4px 18px 18px">Nothing urgent right now.</div>`}</div>`}</section>`;
   // operations snapshot
   const jobs = opsJobs();
@@ -800,7 +802,7 @@ function pageDashboard() {
     const s = p.steps || {}; const d25 = (s.w25 || {}).s === 'Done', d26 = (s.w26 || {}).s === 'Done';
     const soldAt = (s.w22 || {}).doneAt; const age = soldAt ? Math.max(0, -daysFrom(soldAt)) : null;
     return `<div class="orow"><button class="ock press${d25 !== d26 ? ' half' : ''}" data-act="procBoth" data-pid="${p.id}" title="Mark steps 25 & 26 done" aria-label="Mark ${esc(p.name)} processed">${I.tick()}</button>
-      <span style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="display:flex;align-items:center;gap:7px;min-width:0"><span class="dot" style="width:7px;height:7px;background:${dColor(p.designer)}"></span><a href="#/project/${p.id}" class="clink" style="font-size:13px">${esc(p.name)}</a></span>
+      <span style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="display:flex;align-items:center;gap:7px;min-width:0"><span class="dot" style="width:7px;height:7px;background:${dColor(p.designer)}"></span><a href="#/project/${p.id}" class="clink" style="font-size:13px" title="${esc(p.name)}">${esc(shortName(p.name))}</a></span>
       <span style="display:flex;gap:5px;flex-wrap:wrap"><button class="proc press${d25 ? ' on' : ''}" data-act="procOne" data-pid="${p.id}" data-k="w25" aria-pressed="${d25}"><span class="pk"></span>Crewplan &amp; pics</button><button class="proc press${d26 ? ' on' : ''}" data-act="procOne" data-pid="${p.id}" data-k="w26" aria-pressed="${d26}"><span class="pk"></span>Ops email</button></span></span>
       <span class="mono ${age !== null && age >= 5 ? 'hot' : ''}" style="font-size:11.5px;align-self:start;padding-top:2px;color:${age !== null && age >= 5 ? 'var(--urgent)' : 'var(--muted)'}" title="${age === null ? 'Sold date not recorded' : 'Sold ' + age + ' days ago'}">${age === null ? '—' : age + 'd'}</span></div>`;
   }).join('') : `<div class="gempty" style="padding:8px 16px 12px">All sold jobs are processed.</div>`;
@@ -810,13 +812,13 @@ function pageDashboard() {
     const done = ids.filter(n => ((p.steps || {})['w' + n] || {}).s === 'Done' || ((p.steps || {})['w' + n] || {}).s === 'N/A').length;
     const date = p.installDate ? (daysFrom(p.installDate) === 0 ? 'Today' : MO[parseISO(p.installDate).getMonth()] + ' ' + parseISO(p.installDate).getDate()) : (now ? 'Now' : 'Not set');
     const warn = !now && p.installDate && daysFrom(p.installDate) <= 3 && done < ids.length;
-    return `<button class="irow" data-act="goOps" title="Open in Operations"><span style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}${now ? '<span class="nowtag">NOW</span>' : ''}</span><span style="font-size:11.5px;color:var(--muted)">${esc(p.crew || 'No crew leader yet')}</span></span><span class="mono" style="font-size:11.5px;color:var(--${warn ? 'urgent' : now ? 'prog' : 'muted'})">${date}</span><span class="progbtn${done === ids.length ? ' done' : warn ? ' warn' : ''}"><span class="pbar2"><i style="width:${Math.round(done / ids.length * 100)}%"></i></span><span class="pnum">${done}/${ids.length}</span><span>${now ? 'Install' : 'Pre-install'}</span></span></button>`;
+    return `<button class="irow" data-act="goOps" title="Open in Operations"><span style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(shortName(p.name))}${now ? '<span class="nowtag">NOW</span>' : ''}</span><span style="font-size:11.5px;color:var(--muted)">${esc(p.crew || 'No crew leader yet')}</span></span><span class="mono" style="font-size:11.5px;color:var(--${warn ? 'urgent' : now ? 'prog' : 'muted'})">${date}</span><span class="progbtn${done === ids.length ? ' done' : warn ? ' warn' : ''}"><span class="pbar2"><i style="width:${Math.round(done / ids.length * 100)}%"></i></span><span class="pnum">${done}/${ids.length}</span><span>${now ? 'Install' : 'Pre-install'}</span></span></button>`;
   }).join('') : `<div class="gempty" style="padding:8px 16px 12px">No jobs past processing yet.</div>`;
   const opsCard = `<section class="card dcard rise" style="animation-delay:70ms"><div class="dhd">${tog('o', 'Operations', `<span style="color:var(--muted);display:flex">${I.truck(15)}</span>`)}<span class="sums">${sums.map(([n, l, c]) => `<span class="sum${c}"><b>${n}</b>${l}</span>`).join('')}</span><button class="dlink press" data-act="goOps">Big board ›</button></div>
     ${dc.o ? '' : `<div class="cbody opsgrid"><div class="opscol"><div class="olabel">Needs processing</div>${procRows}</div><div class="opscol"><div class="olabel">Installs</div>${instRows}</div></div>`}</section>`;
   // recently edited (one row)
   const recent = activeProjects().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 16);
-  const recCard = `<section class="drawer rise" style="animation-delay:140ms;margin-top:18px"><div class="dhd" style="padding:12px 16px">${tog('r', 'Recently edited')}<a href="#/projects" class="dlink">All projects ›</a></div>
+  const recCard = `<section class="drawer rise" style="animation-delay:140ms;margin-top:18px"><div class="dhd" style="padding:12px 16px">${tog('r', 'Recently edited')}<button class="dlink press" data-act="navx" data-v="#/projects">All projects ›</button></div>
     ${dc.r ? '' : `<div class="fgrid onerow" id="recent-row">${recent.map(p => folderHtml(p, { noActs: true })).join('')}</div>`}</section>`;
   return head + `<div style="display:flex;flex-direction:column;gap:18px">${urgCard}${opsCard}</div>` + recCard;
 }
@@ -1130,12 +1132,20 @@ app.addEventListener('mouseover', (e) => { const b = e.target.closest('[data-seg
 app.addEventListener('mouseout', (e) => { const b = e.target.closest('[data-seg]'); if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('#segrow'))) previewSeg(null); });
 
 app.addEventListener('dragstart', (e) => {
+  const crow = e.target.closest && e.target.closest('[data-cid][draggable]');
+  if (crow) { if (/^(INPUT|BUTTON|TEXTAREA)$/.test(e.target.tagName)) { e.preventDefault(); return; } U.cdrag = { pid: crow.dataset.pid, id: crow.dataset.cid, stage: crow.dataset.stage }; crow.classList.add('dragging'); try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', U.cdrag.id); } catch (x) {} return; }
   const row = e.target.closest && e.target.closest('[data-wid][draggable]'); if (!row) return;
   if (/^(INPUT|BUTTON)$/.test(e.target.tagName)) { e.preventDefault(); return; }
   U.wdrag = row.dataset.wid; row.classList.add('dragging');
   try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', U.wdrag); } catch (x) {}
 });
 app.addEventListener('dragover', (e) => {
+  if (U.cdrag) {
+    const row = e.target.closest && e.target.closest('[data-cid]'); if (!row || row.dataset.pid !== U.cdrag.pid || row.dataset.stage !== U.cdrag.stage) return;
+    e.preventDefault(); document.querySelectorAll('.dropabove,.dropbelow').forEach(n => n.classList.remove('dropabove', 'dropbelow'));
+    if (row.dataset.cid === U.cdrag.id) return;
+    const r = row.getBoundingClientRect(); row.classList.add(e.clientY < r.top + r.height / 2 ? 'dropabove' : 'dropbelow'); return;
+  }
   if (!U.wdrag) return; const row = e.target.closest && e.target.closest('[data-wid]'); if (!row) return;
   const src = S.workflow.find(w => w.id === U.wdrag); if (!src || Number(row.dataset.stage) !== src.stage) return;
   e.preventDefault();
@@ -1144,6 +1154,14 @@ app.addEventListener('dragover', (e) => {
   const r = row.getBoundingClientRect(); row.classList.add(e.clientY < r.top + r.height / 2 ? 'dropabove' : 'dropbelow');
 });
 app.addEventListener('drop', (e) => {
+  if (U.cdrag) {
+    const row = e.target.closest && e.target.closest('[data-cid]'); e.preventDefault(); const from = U.cdrag; U.cdrag = null;
+    document.querySelectorAll('.dropabove,.dropbelow,.dragging').forEach(n => n.classList.remove('dropabove', 'dropbelow', 'dragging'));
+    if (!row || row.dataset.cid === from.id || row.dataset.pid !== from.pid) return;
+    const r = row.getBoundingClientRect(); const after = e.clientY >= r.top + r.height / 2; const to = row.dataset.cid;
+    mutate(from.pid, q => { const list = q.custom || []; const i = list.findIndex(c => c.id === from.id); const item = list.splice(i, 1)[0]; let j = list.findIndex(c => c.id === to); if (after) j++; list.splice(j, 0, item); }, '“' + ((getItem(S.projects[from.pid], from.id) || {}).title || 'Step') + '” moved');
+    return;
+  }
   if (!U.wdrag) return; const row = e.target.closest && e.target.closest('[data-wid]'); e.preventDefault();
   const from = U.wdrag; U.wdrag = null;
   document.querySelectorAll('.dropabove,.dropbelow,.dragging').forEach(n => n.classList.remove('dropabove', 'dropbelow', 'dragging'));
@@ -1152,7 +1170,7 @@ app.addEventListener('drop', (e) => {
   const w = S.workflow.find(x => x.id === from);
   wfChange(wf => { const i = wf.findIndex(x => x.id === from); const item = wf.splice(i, 1)[0]; let j = wf.findIndex(x => x.id === to); if (after) j++; wf.splice(j, 0, item); }, '“' + w.title + '” moved');
 });
-app.addEventListener('dragend', () => { U.wdrag = null; document.querySelectorAll('.dropabove,.dropbelow,.dragging').forEach(n => n.classList.remove('dropabove', 'dropbelow', 'dragging')); });
+app.addEventListener('dragend', () => { U.wdrag = null; U.cdrag = null; document.querySelectorAll('.dropabove,.dropbelow,.dragging').forEach(n => n.classList.remove('dropabove', 'dropbelow', 'dragging')); });
 
 function toggleStage(si) {
   const p = curP(); if (!p) return; const key = p.id + ':' + si; const cs = curStage(p);
@@ -1222,6 +1240,7 @@ document.addEventListener('click', (e) => {
     case 'archiveProject': archiveCurrent(); break;
     case 'deleteProject': deleteCurrent(); break;
     case 'goOps': go('#/operations', { exit: true }); break;
+    case 'navx': go(v, { exit: true }); break;
     case 'theme': U.theme = v; lsSet(LS.theme, v); render(); renderToast(); break;
     case 'motion': U.motion = !U.motion; lsSet(LS.motion, U.motion); render(); break;
     case 'backup': downloadBackup(); break;
