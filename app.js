@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.0.6-r2';
+const APP_VERSION = '5.1.0';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -126,7 +126,8 @@ const U = {
   gone: null,
   busy: false,
   tleave: {}, tback: {}, tgroups: {}, dgroups: {}, dsel: lsGet('gs5:dsel', 'all'), tsort: lsGet('gs5:tsort', 'due'), tsearch: '', dueDay: null,
-  dash: lsGet('gs5:dash', {}), wopen: {}, wdrag: null
+  dash: lsGet('gs5:dash', {}), wopen: {}, wdrag: null,
+  oleave: {}, oback: {}, odrop: null, odrag: null, email: null, asort: lsGet('gs5:asort', 'recent')
 };
 const LOCAL_ONLY = location.protocol === 'file:' || /[?&]local\b/.test(location.search);
 
@@ -201,7 +202,7 @@ function onAuthed() {
     const next = {};
     snap.forEach((d) => { next[d.id] = d.data(); });
     S.projects = next;
-    if (!snap.metadata.fromCache && !cloud.firstSnap) { cloud.firstSnap = true; }
+    if (!snap.metadata.fromCache && !cloud.firstSnap) { cloud.firstSnap = true; setTimeout(purgeArchive, 1500); }
     saveMirror(); computeSync(); render();
   }, (e) => { console.error('Sync error', e); setSync('error', e.message || 'Sync error'); });
   ['workflow', 'settings'].forEach((key) => {
@@ -339,7 +340,8 @@ function go(hash, opts = {}) {
     setTimeout(() => { location.hash = hash; }, 230);
   } else location.hash = hash;
 }
-window.addEventListener('hashchange', () => { U.route = parseRoute(); U.menu = null; U.enter = true; U.gone = null; window.scrollTo(0, 0); render(); });
+window.addEventListener('hashchange', () => { U.route = parseRoute(); U.menu = null; U.enter = true; U.gone = null; window.scrollTo(0, 0); render(); maybeOpenEmailFromRoute(); });
+function maybeOpenEmailFromRoute() { if (U.route.page === 'operations' && U.route.id && S.projects[U.route.id]) { const id = U.route.id; history.replaceState(null, '', '#/operations'); U.route.id = null; openEmail(id); } }
 
 /* ============================================================
    RENDER — shell
@@ -367,7 +369,6 @@ function render() {
   main.className = 'main' + (U.route.page === 'project' ? ' narrow' : '') + (U.enter ? ' enter' : '') + (U.gone ? ' gone' : '');
   main.innerHTML = html;
   U.enter = false;
-  animateStageBar(oldSeg);
   if (U.route.page === 'dashboard') fitRecentRow();
   if (keep) {
     const el = document.getElementById(keep.id);
@@ -452,8 +453,8 @@ function renderPage() {
     case 'tasklist': return pageTasklist();
     case 'due': return pageDue();
     case 'workflow': return pageWorkflow();
-    case 'operations': return pageSoon('Operations', 'Round 3', 'Needs processing, the install schedule, crew leaders and the ops email builder.');
-    case 'archived': return pageSoon('Archived', 'Round 3', 'Archived projects with the 14-day cleanout, pinning and restore.');
+    case 'operations': return pageOperations();
+    case 'archived': return pageArchived();
     default: return pageProjects();
   }
 }
@@ -540,7 +541,7 @@ function pageProject() {
   const dsMenu = m && m.kind === 'ds' ? `<div class="smenu left pop-in" role="menu">${designers().map(x => `<button class="mi${x.id === p.designer ? ' cur' : ''}" role="menuitemradio" aria-checked="${x.id === p.designer}" data-act="setDesigner" data-v="${x.id}"><span class="dot" style="background:var(--c-${x.color})"></span>${esc(x.name)}</button>`).join('')}</div>` : '';
   const head = `<div class="phead" style="align-items:flex-start;margin-bottom:20px">
     <div style="flex:1;min-width:280px">
-      <div class="crumb"><a href="#/projects">Projects</a> <span>/</span> ${esc(p.name)}</div>
+      <div class="crumb"><a href="#/${p.archived ? 'archived' : 'projects'}">${p.archived ? 'Archived' : 'Projects'}</a> <span>/</span> ${esc(p.name)}</div>
       <label><span class="sr">Client name</span><input id="h-name" class="hedit hname" value="${esc(p.name)}" data-commit="name" data-id="${p.id}" autocomplete="off"></label>
       <div class="hmeta">
         <span style="position:relative"><button class="hedit press" data-act="menu" data-kind="ds" data-key="ds" aria-haspopup="menu" aria-expanded="${!!dsMenu}" title="Change designer" style="display:flex;align-items:center;gap:6px;cursor:pointer"><span class="dot" style="background:${dColor(p.designer)}"></span>${esc(d.name)}<span style="opacity:.6;display:flex">${I.down}</span></button>${dsMenu}</span>
@@ -549,10 +550,11 @@ function pageProject() {
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;padding-top:20px">
-      <button class="btn press" data-act="archiveProject" title="Archive project">${I.box(14)}Archive</button>
+      ${p.archived ? '' : `<button class="btn press" data-act="archiveProject" title="Archive project">${I.box(14)}Archive</button>`}
       <button class="btn del press" data-act="deleteProject" title="Delete project">${I.trash()}Delete</button>
     </div></div>`;
-  const askArchive = cs === 6 && !p.noArchivePrompt && !U.gone;
+  const askArchive = cs === 6 && !p.noArchivePrompt && !U.gone && !p.archived;
+  const archNote = p.archived ? `<div class="archbar pop-in" role="status" style="background:var(--kraft)"><span class="dico" style="background:var(--muted)">${I.box(12)}</span><span><span style="color:var(--ink);font-weight:500">This project is archived.</span> ${p.pinned ? 'It’s pinned, so it’s kept.' : daysLeft(p) === null ? '' : 'It deletes in ' + Math.max(0, daysLeft(p)) + (daysLeft(p) === 1 ? ' day' : ' days') + ' unless you pin or restore it.'}</span><span style="margin-left:auto"><button class="btn pri press" data-act="restoreHere" style="font-size:13px;padding:7px 12px">Restore to Projects</button></span></div>` : '';
   const archBar = askArchive ? `<div class="archbar pop-in" role="status"><span class="dico">${I.tick(12)}</span><span><span style="color:var(--ink);font-weight:500">Project Install is complete.</span> Archive this project? Warranty steps stay open if you keep it.</span><span style="margin-left:auto;display:flex;gap:6px"><button class="btn pri press" data-act="archiveProject" style="font-size:13px;padding:7px 12px">${I.box(14)}Archive project</button><button class="btn press" data-act="notNow">Not now</button></span></div>` : '';
   // stage bar
   const hold = U.segHold && U.segHold.pid === p.id ? U.segHold.i : null;
@@ -574,7 +576,7 @@ function pageProject() {
   const stagesToShow = [];
   for (let si = 0; si < 7; si++) { if (si < cs && !U.showDone[p.id]) continue; stagesToShow.push(si); }
   const cards = stagesToShow.map(si => stageHtml(p, si, cs, items)).join('');
-  return head + archBar + stageCard + `<div style="display:flex;flex-direction:column;gap:10px">${doneBar}${cards}</div>`;
+  return head + archNote + archBar + stageCard + `<div style="display:flex;flex-direction:column;gap:10px">${doneBar}${cards}</div>`;
 }
 function stageHtml(p, si, cs, items) {
   const list = stageItems(p, si, items);
@@ -633,8 +635,8 @@ function rowHtml(p, x) {
   const delay = c !== null ? c * 55 : un !== null ? un * 45 : 0;
   const { due, pri, status } = stepCells(p, x);
   // title cell
-  const isProc = x.kind === 't' && (x.n === 25 || x.n === 26);
-  const procBtn = isProc ? `<button class="opslink sm press" data-act="goOps" title="${x.n === 26 ? 'Write the ops email on Operations' : 'Processing step · open Operations'}">${x.n === 26 ? 'EMAIL ›' : 'OPS ›'}</button>` : '';
+  const isProc = x.key === 'w25' || x.key === 'w26';
+  const procBtn = isProc ? `<button class="opslink sm press" data-act="goOps"${x.key === 'w26' ? ` data-email="${p.id}"` : ''} title=""${x.key === 'w26' ? 'Write the ops email on Operations' : 'Processing step · open Operations'}">${x.key === 'w26' ? 'EMAIL ›' : 'OPS ›'}</button>` : '';
   const noteIc = st.note ? `<span class="noteic" title="Has a note">${I.note}</span>` : '';
   const tag = x.kind === 'c' ? '<span class="ptag">THIS PROJECT</span>' : '';
   const grip = x.kind === 'c' ? `<span class="grip cgrip" title="Drag to reorder" aria-hidden="true">${svg(14, '<circle cx="9" cy="6" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="18" r="1"></circle>', 2.4)}</span>` : '';
@@ -676,8 +678,8 @@ function taskRow(r, opts = {}) {
   const { due, pri, status } = stepCells(p, x);
   const leaving = U.tleave[mk];
   const cls = 'step trow ' + TROW_COLS + (leaving ? ' leaving' : '') + (U.tback[mk] ? ' back' : '');
-  const isProc = x.kind === 't' && (x.n === 25 || x.n === 26);
-  const procTag = isProc ? `<button class="opslink sm press" data-act="goOps" title="${x.n === 26 ? 'Write the ops email on Operations' : 'Processing step · open Operations'}">${x.n === 26 ? 'OPS EMAIL ›' : 'PROCESSING ›'}</button>` : '';
+  const isProc = x.key === 'w25' || x.key === 'w26';
+  const procTag = isProc ? `<button class="opslink sm press" data-act="goOps"${x.key === 'w26' ? ` data-email="${p.id}"` : ''} title=""${x.key === 'w26' ? 'Write the ops email on Operations' : 'Processing step · open Operations'}">${x.key === 'w26' ? 'OPS EMAIL ›' : 'PROCESSING ›'}</button>` : '';
   const tags = (x.kind === 'c' ? '<span class="ptag">THIS PROJECT</span>' : '') + (r.upcoming && opts.showUpcoming ? '<span class="ptag up" title="Here because of its date · joins the Tasklist when its stage becomes current">UPCOMING STAGE</span>' : '') + procTag;
   const isOpsStage = x.stage === 4 || x.stage === 5;
   const stageCell = isOpsStage ? `<span style="min-width:0;display:flex"><button class="opslink press" data-act="goOps" title="Open Operations" style="padding:2px 9px;max-width:100%;overflow:hidden;text-overflow:ellipsis">${I.truck(13)}${STAGES[x.stage]}</button></span>` : `<span class="tcell">${STAGES[x.stage]}</span>`;
@@ -808,9 +810,9 @@ function pageDashboard() {
   }).join('') : `<div class="gempty" style="padding:8px 16px 12px">All sold jobs are processed.</div>`;
   const instList = installing.concat(scheduled);
   const instRows = instList.length ? instList.map(p => {
-    const now = curStage(p) === 5; const ids = now ? [34, 35, 36, 37, 38] : [27, 28, 29, 30, 31, 32, 33];
-    const done = ids.filter(n => ((p.steps || {})['w' + n] || {}).s === 'Done' || ((p.steps || {})['w' + n] || {}).s === 'N/A').length;
-    const date = p.installDate ? (daysFrom(p.installDate) === 0 ? 'Today' : MO[parseISO(p.installDate).getMonth()] + ' ' + parseISO(p.installDate).getDate()) : (now ? 'Now' : 'Not set');
+    const now = curStage(p) === 5; const ids = opsItems(p, now ? 5 : 4);
+    const done = ids.filter(x => isClosed(x.st.s)).length;
+    const date = p.installDate ? installLabel(p.installDate) : (now ? 'Now' : 'Not set');
     const warn = !now && p.installDate && daysFrom(p.installDate) <= 3 && done < ids.length;
     return `<button class="irow" data-act="goOps" title="Open in Operations"><span style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(shortName(p.name))}${now ? '<span class="nowtag">NOW</span>' : ''}</span><span style="font-size:11.5px;color:var(--muted)">${esc(p.crew || 'No crew leader yet')}</span></span><span class="mono" style="font-size:11.5px;color:var(--${warn ? 'urgent' : now ? 'prog' : 'muted'})">${date}</span><span class="progbtn${done === ids.length ? ' done' : warn ? ' warn' : ''}"><span class="pbar2"><i style="width:${Math.round(done / ids.length * 100)}%"></i></span><span class="pnum">${done}/${ids.length}</span><span>${now ? 'Install' : 'Pre-install'}</span></span></button>`;
   }).join('') : `<div class="gempty" style="padding:8px 16px 12px">No jobs past processing yet.</div>`;
@@ -901,7 +903,271 @@ function wfCommit(el) {
 }
 
 /* ============================================================
-   PAGE — Settings (round 1: appearance + data)
+   PAGE — Operations
+   ============================================================ */
+/* Operations steps are matched by their permanent IDs, so editing the Workflow never breaks them:
+   w22 sold · w25 crewplan · w26 ops email · pre-install = the rest of Finalize & Process · install = Project Install */
+const opsItems = (p, stage) => projItems(p).filter(x => x.stage === stage && !x.optional && x.key !== 'w25' && x.key !== 'w26');
+const stepS = (p, n) => (((p.steps || {})['w' + n]) || {}).s || 'Not Started';
+const stepDone = (p, n) => { const s = stepS(p, n); return s === 'Done' || s === 'N/A'; };
+function wfIdForN(n) { return 'w' + n; }
+function opsParts() {
+  const jobs = opsJobs();
+  const proc = jobs.filter(p => curStage(p) === 4 && !(stepS(p, 25) === 'Done' && stepS(p, 26) === 'Done'));
+  const now = jobs.filter(p => curStage(p) === 5);
+  const upcoming = jobs.filter(p => curStage(p) === 4 && !proc.includes(p));
+  return { jobs, proc, now, upcoming };
+}
+function soldAge(p) { const d = ((p.steps || {}).w22 || {}).doneAt; return d ? Math.max(0, -daysFrom(d)) : null; }
+function installLabel(iso) { if (!iso) return ''; const n = daysFrom(iso); if (n === 0) return 'Today'; if (n === 1) return 'Tomorrow'; const d = parseISO(iso); return WK[d.getDay()] + ', ' + MO[d.getMonth()] + ' ' + d.getDate(); }
+function pageOperations() {
+  const { proc, now, upcoming } = opsParts();
+  const procAll = proc.concat(Object.keys(U.oleave).map(id => S.projects[id]).filter(p => p && !proc.includes(p)));
+  const sched = upcoming.filter(p => p.installDate).length;
+  const head = `<div class="phead"><div><div class="eyebrow">Finalize &amp; Process · Project Install</div><h1>Operations</h1></div>
+    <div class="sums" style="margin:0">${[[proc.length, 'to process', proc.length ? ' hot' : ''], [now.length, 'installing now', ''], [sched, 'scheduled', ''], [upcoming.length - sched, 'not scheduled', '']].map(([n, l, c]) => `<span class="sum${c}"><b>${n}</b>${l}</span>`).join('')}</div></div>`;
+  if (!opsJobs().length && !Object.keys(U.oleave).length) {
+    return head + `<div class="empty rise"><h2>No jobs in Finalize &amp; Process yet</h2><p>Jobs show up here once their Revise stage is complete. Jobs with Crewplan or Ops Email marked N/A are left off.</p></div>`;
+  }
+  // needs processing
+  const procRows = procAll.length ? procAll.map(p => {
+    const d25 = stepS(p, 25) === 'Done', d26 = stepS(p, 26) === 'Done'; const age = soldAge(p);
+    const hasDraft = p.emailDraft && p.emailDraft.touched;
+    return `<div class="orow2${U.oleave[p.id] ? ' leaving' : ''}${U.oback[p.id] ? ' back' : ''}">
+      <button class="ock press${d25 !== d26 ? ' half' : ''}" data-act="procBothAnim" data-pid="${p.id}" title="Mark steps 25 &amp; 26 done" aria-label="Mark ${esc(p.name)} processed">${I.tick()}</button>
+      <span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="dot" style="width:7px;height:7px;background:${dColor(p.designer)}"></span><a href="#/project/${p.id}" class="clink" title="${esc(p.name)}">${esc(shortName(p.name))}</a></span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><button class="proc press${d25 ? ' on' : ''}" data-act="procOne" data-pid="${p.id}" data-k="${wfIdForN(25)}" aria-pressed="${d25}"><span class="pk"></span>Crewplan &amp; pics</button><button class="proc press${d26 ? ' on' : ''}" data-act="procOne" data-pid="${p.id}" data-k="${wfIdForN(26)}" aria-pressed="${d26}"><span class="pk"></span>Ops email</button><button class="ewrite press${hasDraft ? ' draft' : ''}" data-act="openEmail" data-pid="${p.id}">${svg(11, '<path d="M4 20h4L19 9l-4-4L4 16v4z"></path>', 2)}${hasDraft ? 'Edit draft' : 'Write email'}</button></span>
+      <span class="mono" style="font-size:12px;color:${age !== null && age >= 5 ? 'var(--urgent)' : 'var(--muted)'};text-align:right" title="${age === null ? 'Sold date not recorded (step 22)' : 'Sold ' + age + ' days ago'}">${age === null ? '—' : 'Sold ' + age + 'd'}</span>
+    </div>`;
+  }).join('') : `<div class="gempty" style="padding:6px 18px 16px">All sold jobs are processed.</div>`;
+  const procCard = `<section class="card dcard rise"><div class="dhd"><h2>Needs processing</h2><span class="mono" style="font-size:12px;color:var(--muted)">${proc.length}</span><span style="font-size:12px;color:var(--muted)">· sold jobs missing step 25 or 26</span></div>
+    ${procAll.length ? `<div class="colhead ohead"><span></span><span>Job</span><span>Steps</span><span style="text-align:right">Sold</span></div>` : ''}${procRows}</section>`;
+  // install schedule
+  const byDate = (a, b) => (a.installDate ? daysFrom(a.installDate) : 9999) - (b.installDate ? daysFrom(b.installDate) : 9999) || a.name.localeCompare(b.name);
+  const sec = (id, title, list, sub) => `<section class="card dcard rise sched${U.odrop === id ? ' dropping' : ''}" data-dropzone="${id}" style="animation-delay:${id === 'now' ? 60 : 110}ms"><div class="dhd"><h2>${title}</h2><span class="mono" style="font-size:12px;color:var(--muted)">${list.length}</span><span style="font-size:12px;color:var(--muted)">· ${sub}</span></div>
+    ${list.length ? `<div class="colhead srow-grid"><span></span><span>Job</span><span>Install date</span><span>Crew leader</span><span>Progress</span><span></span></div>${list.slice().sort(byDate).map(p => schedRow(p, id)).join('')}` : `<div class="gempty dropzone-empty" style="padding:6px 18px 16px">${id === 'now' ? 'Nothing installing right now. Drag a job here when the crew starts.' : 'No processed jobs waiting. Jobs land here after steps 25 and 26.'}</div>`}</section>`;
+  return head + `<div style="display:flex;flex-direction:column;gap:18px">${procCard}${sec('now', 'Installing now', now, 'Project Install stage')}${sec('up', 'Upcoming', upcoming, 'drag between sections to start or pause an install')}</div>`;
+}
+function schedRow(p, zone) {
+  const isNow = zone === 'now'; const ids = opsItems(p, isNow ? 5 : 4);
+  const done = ids.filter(x => isClosed(x.st.s)).length;
+  const warn = !isNow && p.installDate && daysFrom(p.installDate) <= 3 && done < ids.length;
+  const m = U.menu;
+  const dOpen = m && m.kind === 'idate' && m.key === p.id;
+  const dow = today0().getDay(); const fri = ((5 - dow + 7) % 7) || 7; const mon = ((1 - dow + 7) % 7) || 7;
+  const quick = [['Today', 0], ['Tomorrow', 1], ['By Friday', fri], ['Next Monday', mon], ['Monday after', mon + 7]];
+  const dMenu = dOpen ? `<div class="smenu pop-in" role="menu" style="min-width:210px;left:0;right:auto"><div class="mhead">Install date</div>${quick.map(([l, n]) => { const iso = addDays(n); const d = parseISO(iso); return `<button class="mi" data-act="setInstall" data-pid="${p.id}" data-v="${iso}">${l}<span class="hint">${MO[d.getMonth()]} ${d.getDate()}</span></button>`; }).join('')}<label class="mpick">Pick a date<input type="date" value="${p.installDate || ''}" data-change="pickInstall" data-pid="${p.id}"></label>${p.installDate ? `<button class="mi danger" data-act="setInstall" data-pid="${p.id}" data-v="">Clear date</button>` : ''}</div>` : '';
+  const crews = (S.settings.crews || []).slice().sort((a, b) => a.localeCompare(b));
+  const pOpen = m && m.kind === 'prog' && m.key === p.id;
+  const pop = pOpen ? `<div class="smenu pop-in progpop" role="dialog" aria-label="${isNow ? 'Install' : 'Pre-install'} checklist"><div class="mhead">${isNow ? 'Install' : 'Pre-install'} · ${esc(shortName(p.name))}</div>${ids.map(x => { const s = x.st.s; const ok = isClosed(s); return `<button class="mi pchk${ok ? ' on' : ''}" data-act="progStep" data-pid="${p.id}" data-k="${x.key}"><span class="bx">${I.tick(9)}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis${s === 'N/A' ? ';opacity:.6' : ''}">${esc(x.title)}</span><span class="hint">${s === 'N/A' ? 'N/A' : (x.n || '')}</span></button>`; }).join('')}<a class="mi" href="#/project/${p.id}" style="text-decoration:none;color:var(--accent);font-weight:500;border-top:1px solid var(--line);margin-top:4px;border-radius:0 0 7px 7px">Open project ›</a></div>` : '';
+  return `<div class="step srow srow-grid${U.odrag === p.id ? ' dragging' : ''}" data-opid="${p.id}" data-zone="${zone}" draggable="true">
+    <span class="grip" title="Drag to the other section" aria-hidden="true">${svg(14, '<circle cx="9" cy="6" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="18" r="1"></circle>', 2.4)}</span>
+    <span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="dot" style="width:7px;height:7px;background:${dColor(p.designer)}"></span><a href="#/project/${p.id}" class="clink" title="${esc(p.name)}">${esc(shortName(p.name))}</a>${isNow ? '<span class="nowtag">NOW</span>' : ''}</span>
+    <div style="position:relative;min-width:0"><button class="duebtn press tone-${warn ? 'urgent' : p.installDate ? 'ink' : 'muted'}" data-act="menu" data-kind="idate" data-key="${p.id}" aria-haspopup="menu" aria-expanded="${dOpen}">${I.cal}${p.installDate ? esc(installLabel(p.installDate)) : 'Set date'}</button>${dMenu}</div>
+    <label style="min-width:0"><span class="sr">Crew leader for ${esc(p.name)}</span><select class="sel crewsel" data-change="crew" data-pid="${p.id}"><option value="">Assign crew leader…</option>${crews.map(c => `<option value="${esc(c)}"${p.crew === c ? ' selected' : ''}>${esc(c)}</option>`).join('')}${p.crew && !crews.includes(p.crew) ? `<option value="${esc(p.crew)}" selected>${esc(p.crew)}</option>` : ''}</select></label>
+    <div style="position:relative"><button class="progbtn press${done === ids.length ? ' done' : warn ? ' warn' : ''}" data-act="menu" data-kind="prog" data-key="${p.id}" aria-haspopup="dialog" aria-expanded="${pOpen}" title="${warn ? 'Install is within 3 days and pre-install isn’t finished' : 'Open checklist'}"><span class="pbar2"><i style="width:${Math.round(done / ids.length * 100)}%"></i></span><span class="pnum">${done}/${ids.length}</span><span>${isNow ? 'Install' : 'Pre-install'}</span></button>${pop}</div>
+    <button class="ibtn press" data-act="${isNow ? 'pauseInstall' : 'startInstall'}" data-pid="${p.id}" title="${isNow ? 'Move back to Upcoming' : 'Start install (move to Installing now)'}" aria-label="${isNow ? 'Move back to Upcoming' : 'Start install'}">${isNow ? svg(14, '<path d="M12 5v14M6 13l6 6 6-6"></path>', 2) : svg(14, '<path d="M12 19V5M6 11l6-6 6 6"></path>', 2)}</button>
+  </div>`;
+}
+function startInstall(pid) {
+  const p = S.projects[pid]; if (!p) return;
+  const keys = ['w25', 'w26'].concat(opsItems(p, 4).map(x => x.key));
+  mutate(pid, q => { keys.forEach(id => { const x = getItem(q, id); if (x && x.st.s !== 'N/A') setItem(q, id, { s: 'Done', doneAt: todayISO() }); }); if (!q.installDate) q.installDate = todayISO(); q.noArchivePrompt = false; }, shortName(p.name) + ' is installing now');
+}
+function pauseInstall(pid) {
+  const p = S.projects[pid]; if (!p) return;
+  const keys = opsItems(p, 4).concat(opsItems(p, 5)).map(x => x.key);
+  mutate(pid, q => { keys.forEach(id => { const x = getItem(q, id); if (x && x.st.s === 'Done') setItem(q, id, { s: 'Not Started', doneAt: '' }); }); }, shortName(p.name) + ' moved back to Upcoming');
+}
+function procBothAnim(pid) {
+  const p = S.projects[pid]; if (!p || U.oleave[pid]) return;
+  const finish = () => { delete U.oleave[pid]; mutate(pid, q => { [25, 26].forEach(n => setItem(q, wfIdForN(n), { s: 'Done', doneAt: todayISO() })); }, shortName(p.name) + ' processed · steps 25–26 checked', { onUndo: () => { U.oback[pid] = true; setTimeout(() => { delete U.oback[pid]; }, 500); } }); };
+  if (!motionOK()) return finish();
+  U.oleave[pid] = true; render(); setTimeout(finish, 620);
+}
+
+/* ============================================================
+   OPS EMAIL BUILDER (step 26) — side panel over Operations
+   ============================================================ */
+const EM_BOOL = ['greetOn', 'relatedOn', 'planOn', 'crewOn', 'placeholderOn', 'hardReq', 'accessOn', 'weatherOn', 'locatesOn', 'reviewOn', 'poOn'];
+const EM_DEFAULT_KEYS = ['notifyTags', 'locatesTags', 'locatesPhrase', 'locatesScope', 'reviewTags', 'poTags', 'poMaterials', 'planYear', 'senderName'];
+const EM_POS = [['greeting', 'After greeting'], ['intro', 'After intro / MH line'], ['related', 'After related project note'], ['includes', 'After includes list'], ['extraScope', 'After additional scope note'], ['plan', 'After plans & pics'], ['crew', 'After crew & scheduling'], ['access', 'After access note'], ['weather', 'After weather note'], ['locates', 'After locates'], ['review', 'After review sheet'], ['po', 'After material PO'], ['closing', 'After closing line'], ['end', 'At the very end (before sign-off)']];
+function emNewDraft(p) {
+  const hr = new Date().getHours();
+  let timeframe = '';
+  if (p.installDate) { const x = parseISO(p.installDate); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); timeframe = 'the week of ' + MO[x.getMonth()] + ' ' + x.getDate(); }
+  const d = { greetOn: true, timeOfDay: hr < 12 ? 'Morning' : hr < 17 ? 'Afternoon' : 'Evening', customerName: '', pronoun: 'he', scopeSummary: '', city: '', mh: '', mhScope: '', includesList: '', extraScopeNote: '',
+    relatedOn: false, relatedNote: '', planOn: true, planYear: String(new Date().getFullYear()), crewOn: true, notifyTags: '', placeholderOn: true, crewLead: p.crew ? p.crew.split(' ')[0] : '', timeframe, hardReq: false, schedulingNote: '',
+    accessOn: false, accessNote: '', weatherOn: false, weatherNote: '', locatesOn: true, locatesTags: '', locatesPhrase: 'locates will be needed for', locatesScope: '', reviewOn: true, reviewTags: '', poOn: true, poTags: '', poMaterials: '',
+    extras: [], closingNote: 'Reach out if you have any questions.', signOff: 'Thanks,', senderName: '', seq: 0, touched: false };
+  const def = S.settings.opsEmailDefaults || {};
+  EM_DEFAULT_KEYS.forEach(k => { if (def[k]) d[k] = def[k]; });
+  return d;
+}
+function emBuild(d) {
+  const P = d.pronoun === 'she' ? { subj: 'she', poss: 'her', verb: 'wants', be: 'is' } : d.pronoun === 'they' ? { subj: 'they', poss: 'their', verb: 'want', be: 'are' } : { subj: 'he', poss: 'his', verb: 'wants', be: 'is' };
+  const tv = (x) => String(x || '').trim();
+  const V = (x, ph) => tv(x) ? { t: tv(x) } : { t: '[' + ph + ']', miss: true };
+  const T = (t) => ({ t });
+  const joinList = (items) => { const l = String(items || '').split('\n').map(x => x.trim()).filter(Boolean); if (!l.length) return ''; if (l.length === 1) return l[0] + '.'; if (l.length === 2) return l[0] + ' and ' + l[1] + '.'; return l.slice(0, -1).join(', ') + ', and ' + l[l.length - 1] + '.'; };
+  const extras = {}; (d.extras || []).forEach(x => { if (tv(x.text)) (extras[x.pos] = extras[x.pos] || []).push(tv(x.text)); });
+  const paras = [];
+  const push = (key, segs) => { paras.push(segs); (extras[key] || []).forEach(t => paras.push([T(t)])); };
+  if (d.greetOn) push('greeting', [T(d.timeOfDay + ' everybody.')]);
+  push('intro', [V(d.customerName, 'Customer name'), T(' ' + P.be + ' all signed up and ready to go - ' + P.subj + ' ' + P.verb + ' us to '), V(d.scopeSummary, 'scope summary'), T(' at ' + P.poss + ' home '), V(d.city, 'location'), T(', estimated at '), V(d.mh, 'MH'), T(' MH of work' + (tv(d.mhScope) ? ' ' + tv(d.mhScope) : '') + '.')]);
+  if (d.relatedOn && tv(d.relatedNote)) push('related', [T(tv(d.relatedNote))]);
+  const inc = joinList(d.includesList); if (inc) push('includes', [T('Project includes ' + inc)]);
+  if (tv(d.extraScopeNote)) push('extraScope', [T(tv(d.extraScopeNote))]);
+  if (d.planOn) push('plan', [T('Plan and pics are attached to this email and in the '), V(d.planYear, 'year'), T(' CREW folder in OneDrive.')]);
+  if (d.crewOn) {
+    const segs = [];
+    if (tv(d.notifyTags)) segs.push(T(tv(d.notifyTags) + ' '));
+    if (d.placeholderOn) { segs.push(T("there's already a placeholder for this project under "), V(d.crewLead, 'crew lead'), T("'s column for "), V(d.timeframe, 'timeframe'), T('.')); if (d.hardReq) segs.push(T(' Needs to be '), V(d.crewLead, 'crew lead'), T("'s crew that works on this one.")); }
+    if (tv(d.schedulingNote)) segs.push(T((segs.length ? ' ' : '') + tv(d.schedulingNote)));
+    if (segs.length) push('crew', segs);
+  }
+  if (d.accessOn && tv(d.accessNote)) push('access', [T(tv(d.accessNote))]);
+  if (d.weatherOn && tv(d.weatherNote)) push('weather', [T(tv(d.weatherNote))]);
+  if (d.locatesOn) push('locates', [V(d.locatesTags, 'tag'), T(' ' + (tv(d.locatesPhrase) || 'locates will be needed for') + ' '), V(d.locatesScope, 'scope'), T('.')]);
+  if (d.reviewOn) push('review', [V(d.reviewTags, 'tag'), T(' please look over the attached review sheet and get with me if you have any concerns about availability prior to install.')]);
+  if (d.poOn) push('po', [V(d.poTags, 'tag'), T(' please note that a Material PO# is required for this one ('), V(d.poMaterials, 'materials'), T(').')]);
+  if (tv(d.closingNote)) push('closing', [T(tv(d.closingNote))]);
+  (extras.end || []).forEach(t => paras.push([T(t)]));
+  paras.push([T((tv(d.signOff) || 'Thanks,') + (tv(d.senderName) ? '\n' + tv(d.senderName) : ''))]);
+  return { paras, text: paras.map(p => p.map(x => x.t).join('')).join('\n\n'), miss: paras.reduce((n, p) => n + p.filter(x => x.miss).length, 0) };
+}
+function openEmail(pid) {
+  const p = S.projects[pid]; if (!p) return;
+  U.email = { pid, d: p.emailDraft ? Object.assign(emNewDraft(p), clone(p.emailDraft)) : emNewDraft(p), copied: false, note: '' };
+  renderEmail(true);
+}
+let emSaveTimer = null;
+function emSave() {
+  clearTimeout(emSaveTimer);
+  emSaveTimer = setTimeout(() => { const e = U.email; if (!e) return; const p = S.projects[e.pid]; if (!p) return; const q = clone(p); q.emailDraft = clone(e.d); putProject(q, { keepTime: true }); }, 700);
+}
+function emPreview() {
+  const e = U.email; if (!e) return;
+  const b = emBuild(e.d);
+  const box = document.getElementById('em-text'); if (box) box.innerHTML = b.paras.map(p => `<p>${p.map(x => x.miss ? `<span class="miss">${esc(x.t)}</span>` : esc(x.t)).join('')}</p>`).join('');
+  const n = document.getElementById('em-miss'); if (n) n.textContent = b.miss ? b.miss + (b.miss === 1 ? ' blank to fill' : ' blanks to fill') : 'Ready to copy';
+}
+function renderEmail(first) {
+  const box = document.getElementById('overlay'); if (!box) return;
+  const e = U.email;
+  if (!e) { box.innerHTML = ''; return; }
+  const p = S.projects[e.pid]; if (!p) { U.email = null; box.innerHTML = ''; return; }
+  box.className = 'gs-' + U.theme;
+  const d = e.d;
+  const body = box.querySelector('.epbody'); const keepScroll = body ? body.scrollTop : 0;
+  const ae = document.activeElement; const keepId = ae && box.contains(ae) ? ae.id : null;
+  const f = (k, label, ph = '', kind = 'text', rows = 2, opts = null) => {
+    let ctl;
+    if (kind === 'select') ctl = `<select class="ein" id="em-${k}" data-em="${k}">${opts.map(([v, l]) => `<option value="${esc(v)}"${d[k] === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    else if (kind === 'textarea') ctl = `<textarea class="ein" id="em-${k}" rows="${rows}" placeholder="${esc(ph)}" data-em="${k}">${esc(d[k])}</textarea>`;
+    else ctl = `<input class="ein" id="em-${k}" ${kind === 'number' ? 'type="number" inputmode="numeric"' : 'type="text"'} placeholder="${esc(ph)}" value="${esc(d[k])}" data-em="${k}" autocomplete="off">`;
+    return `<label class="ef"><span>${esc(label)}</span>${ctl}</label>`;
+  };
+  const row = (cols, ...items) => `<div class="esrow" style="grid-template-columns:${cols}">${items.join('')}</div>`;
+  const tog = (k, label) => `<span class="esinc">${label || 'include'}<button class="etog${d[k] ? ' on' : ''}" data-act="emTog" data-v="${k}" aria-pressed="${!!d[k]}" aria-label="${label || 'Include'}"></button></span>`;
+  const chk = (k, label) => `<button class="echk${d[k] ? ' on' : ''}" data-act="emTog" data-v="${k}" aria-pressed="${!!d[k]}"><span class="bx">${I.tick(10)}</span>${esc(label)}</button>`;
+  const sec = (label, inner, k, extra) => `<div class="esec"><div class="eshead"><span class="eslabel">${esc(label)}</span>${extra || ''}${k ? tog(k) : ''}</div><div class="esbody${k && !d[k] ? ' off' : ''}">${inner}</div></div>`;
+  const hint = (t) => `<span class="ehint">${esc(t)}</span>`;
+  const form = [
+    sec('Greeting & scope', `<div class="esbody${d.greetOn ? '' : ' off'}">${f('timeOfDay', 'Greeting', '', 'select', 0, [['Morning', 'Morning everybody.'], ['Afternoon', 'Afternoon everybody.'], ['Evening', 'Evening everybody.']])}</div>`
+      + row('minmax(0,1fr) 130px', f('customerName', 'Customer name', 'John Ringelestein'), f('pronoun', 'Pronoun', '', 'select', 0, [['he', 'He / his'], ['she', 'She / her'], ['they', 'They / their']]))
+      + f('scopeSummary', 'Short scope summary — goes right after “wants us to”', 'install some foundation plantings and a retaining wall')
+      + row('minmax(0,1fr) 90px minmax(0,1fr)', f('city', 'Home ___ (location phrase)', 'here in Ames'), f('mh', 'Estimated MH', '124', 'number'), f('mhScope', 'MH qualifier (optional)', 'on the landscape side'))
+      + f('includesList', 'Project includes — one item per line', 'removing several large existing shrubs\nreplacing the river gravel in the beds with mulch\ninstalling several additional plantings\nbuilding a paver walkway in the back yard', 'textarea', 4)
+      + f('extraScopeNote', 'Additional scope note (optional, own line after the list)', 'There’s some time built in for grading, sod repair, and redoing the edging.'), null, tog('greetOn', 'greeting')),
+    sec('Related project / other scope', f('relatedNote', 'Note', 'The paperwork for the separate Structures scope is in the Operations folder, along with POs for the deck and pergola. There’s 270 MH estimated for that portion.', 'textarea', 3) + hint('For multi-scope jobs where another department has its own folder, PO or MH estimate. Lands right after the intro line.'), 'relatedOn'),
+    sec('Plans & pics', row('120px', f('planYear', 'CREW folder year', '2026')), 'planOn'),
+    sec('Crew & scheduling', f('notifyTags', 'Who to notify — exactly as it should appear', '@Ward Wester / @Soren Faaborg') + chk('placeholderOn', 'Mention an existing placeholder on the schedule')
+      + `<div class="esbody${d.placeholderOn ? '' : ' off'}">${row('minmax(0,1fr) minmax(0,1fr)', f('crewLead', 'Crew leader / column', 'Kaleb'), f('timeframe', 'Timeframe', 'early July'))}${chk('hardReq', 'Needs to be this specific crew')}</div>`
+      + f('schedulingNote', 'Additional scheduling note', 'Good to stay where it’s at on the schedule, and it can go as soon as we have all the plants and pavers in.', 'textarea', 2), 'crewOn'),
+    sec('Access / site notes', f('accessNote', 'Note', 'Access to the back yard is narrow, but the crew got a ditch witch back there last fall.', 'textarea', 2), 'accessOn'),
+    sec('Weather / other constraint', f('weatherNote', 'Note', 'Can’t go on a rainy day.'), 'weatherOn'),
+    sec('Locates', row('minmax(0,1fr) minmax(0,1fr)', f('locatesTags', 'Who to tag', '@Sally Gorenz'), f('locatesPhrase', 'Phrasing', 'locates will be needed for')) + f('locatesScope', 'Scope', 'the entire property'), 'locatesOn'),
+    sec('Review sheet', f('reviewTags', 'Who to tag', '@Ames Tagging / @Renee Spratt'), 'reviewOn'),
+    sec('Material PO', row('minmax(0,1fr) minmax(0,1fr)', f('poTags', 'Who to tag', '@Chad Andersen / @Mike Entner'), f('poMaterials', 'Materials', 'pavers, etc.')), 'poOn'),
+    `<div class="esec"><div class="eshead"><span class="eslabel">Extra paragraphs</span><button class="elink press" data-act="emAddPara" style="margin-left:auto">+ Add paragraph</button></div><div class="esbody">${hint('Drop a one-off paragraph anywhere in the email: pick where it lands, then write it.')}${(d.extras || []).map(x => `<div class="expara"><div style="display:flex;gap:6px;align-items:center"><select class="ein" data-empara="pos" data-x="${x.id}" aria-label="Where it goes">${EM_POS.map(([k, l]) => `<option value="${k}"${x.pos === k ? ' selected' : ''}>${l}</option>`).join('')}</select><button class="ibtn press" data-act="emDelPara" data-x="${x.id}" aria-label="Remove paragraph" style="width:28px;height:28px">${I.x(14)}</button></div><textarea class="ein" id="em-x-${x.id}" rows="2" placeholder="Type the paragraph…" data-empara="text" data-x="${x.id}">${esc(x.text)}</textarea></div>`).join('')}</div></div>`,
+    sec('Closing', f('closingNote', 'Closing line', 'Reach out if you have any questions.') + row('minmax(0,1fr) minmax(0,1fr)', f('signOff', 'Sign-off', 'Thanks,'), f('senderName', 'Your name (optional)', ''))
+      + `<span style="display:flex;align-items:center;gap:8px"><button class="elink press" data-act="emDefaults" style="margin-left:-6px">Save the names &amp; tags as my defaults</button><span class="ehint" id="em-note">${esc(e.note || '')}</span></span>`)
+  ].join('');
+  const b = emBuild(d);
+  box.innerHTML = `<div class="escrim${first ? ' first' : ''}" data-act="emClose"></div>
+  <div class="epanel${first ? ' first' : ''}" role="dialog" aria-modal="true" aria-label="Ops email for ${esc(p.name)}">
+    <div class="ephead"><span style="color:var(--muted);display:flex">${svg(15, '<rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path>')}</span><span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:16px;font-weight:600;letter-spacing:-.01em">Ops email</span><span style="font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(shortName(p.name))} · step 26 · ${p.crew ? 'Crew leader ' + esc(p.crew) : 'No crew leader yet'}</span></span><span style="margin-left:auto;font-size:12px;color:var(--muted)">${d.touched ? 'Draft saved with the project' : 'Filled in from the project'}</span><button class="ibtn press" data-act="emClose" aria-label="Close" title="Close (Esc)" style="width:32px;height:32px">${I.x(16)}</button></div>
+    <div class="epbody"><div>${form}</div>
+      <div class="eprev"><div class="esheet"><div class="eshd"><span class="eslabel">Email</span><span class="ehint" id="em-miss">${b.miss ? b.miss + (b.miss === 1 ? ' blank to fill' : ' blanks to fill') : 'Ready to copy'}</span><button class="ecopy press${e.copied ? ' copied' : ''}" data-act="emCopy" style="margin-left:auto">${svg(13, '<rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path>', 2)}${e.copied ? 'Copied' : 'Copy email'}</button></div><div class="etext" id="em-text"></div></div></div>
+    </div></div>`;
+  emPreview();
+  const nb = box.querySelector('.epbody'); if (nb) nb.scrollTop = keepScroll;
+  if (keepId) { const el = document.getElementById(keepId); if (el) el.focus(); }
+}
+function emCopy() {
+  const e = U.email; if (!e) return;
+  const text = emBuild(e.d).text;
+  const done = () => { e.copied = true; renderEmail(); setTimeout(() => { if (U.email === e) { e.copied = false; renderEmail(); } }, 1600); };
+  const fallback = () => { try { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); } catch (x) {} };
+  try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, () => { fallback(); done(); }); return; } } catch (x) {}
+  fallback(); done();
+}
+
+/* ============================================================
+   PAGE — Archived (14-day cleanout by default)
+   ============================================================ */
+function retentionDays() { const r = Number(S.settings.retention); return isNaN(r) ? 14 : r; }
+function daysLeft(p) { const r = retentionDays(); if (!r || p.pinned) return null; const left = r - Math.floor((Date.now() - (p.archivedAt || Date.now())) / 86400000); return left; }
+let purgedOnce = false;
+function purgeArchive() {
+  if (purgedOnce) return; if (!LOCAL_ONLY && !cloud.firstSnap) return;
+  purgedOnce = true;
+  const r = retentionDays(); if (!r) return;
+  Object.values(S.projects).filter(p => p.archived && !p.pinned && daysLeft(p) !== null && daysLeft(p) <= 0).forEach(p => removeProject(p.id));
+}
+function pageArchived() {
+  const all = Object.values(S.projects).filter(p => p.archived);
+  const list = all.filter(dselOK);
+  const r = retentionDays();
+  const sorts = { recent: (a, b) => (b.archivedAt || 0) - (a.archivedAt || 0), added: (a, b) => (a.archivedAt || 0) - (b.archivedAt || 0), az: (a, b) => a.name.localeCompare(b.name) };
+  const rows = list.slice().sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (sorts[U.asort] || sorts.recent)(a, b));
+  const note = r ? `Kept for ${r} days after archiving, then deleted automatically. Pinned projects are kept until you unpin them.` : 'Archived projects are kept until you delete them (auto-delete is off in Settings).';
+  const head = `<div class="phead"><div><div class="eyebrow">${all.length} archived</div><h1>Archived</h1></div>
+    <label><span class="sr">Sort</span><select class="sel" data-change="asort">${[['recent', 'Recently archived'], ['added', 'Date added'], ['az', 'Client A–Z']].map(([v, l]) => `<option value="${v}"${(U.asort || 'recent') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label></div>
+    <div style="margin:-8px 0 16px">${designerPills()}</div>`;
+  if (!all.length) return head + `<div class="empty rise"><h2>Nothing archived</h2><p>${esc(note)}</p></div>`;
+  return head + `<section class="drawer kraft rise"><div style="padding:12px 16px 0;font-size:12.5px;color:var(--muted)">${esc(note)}</div><div class="fgrid">${rows.map(archFolder).join('') || '<div class="gempty">No archived projects for this designer.</div>'}</div></section>`;
+}
+function archFolder(p) {
+  const left = daysLeft(p);
+  const tab = p.pinned ? `${svg(10, '<path d="M9 4h6l-1 6 3 3v2H7v-2l3-3z"></path><path d="M12 15v5"></path>', 2.2)}Pinned · kept` : left === null ? 'Kept' : left <= 0 ? 'Deletes today' : left === 1 ? 'Deletes tomorrow' : 'Deletes in ' + left + ' days';
+  const tabCls = p.pinned ? ' pinned' : left !== null && left <= 3 ? ' warn' : '';
+  const d = parseISO(isoOf(new Date(p.archivedAt || Date.now())));
+  const cls = 'fwrap' + (U.leaving[p.id] ? ' ' + U.leaving[p.id] : '') + (U.back[p.id] ? ' back' : '');
+  return `<div class="${cls}" data-pid="${p.id}">
+    <div class="folder press" role="button" tabindex="0" data-act="openProject" data-id="${p.id}" aria-label="Open ${esc(p.name)}">
+      <span class="ftab${tabCls}">${p.pinned ? '' : '<span class="tabdot" style="background:currentColor"></span>'}${tab}</span>
+      <span class="fpaper" aria-hidden="true"></span>
+      <span class="fcover">
+        <span style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="display:flex;align-items:center;gap:6px;min-width:0"><span class="dot" style="width:7px;height:7px;background:${dColor(p.designer)}"></span><span class="fname">${esc(p.name)}</span></span><span class="faddr">${esc(p.address) || '<span style="opacity:.6">No address</span>'}</span></span>
+        <span class="fmeta"><span class="mono" style="font-size:11px">PO ${esc(p.po) || '—'}</span><span>Archived ${MO[d.getMonth()]} ${d.getDate()}</span></span>
+        <span class="fmeta"><span>${esc(designer(p.designer).name)}</span></span>
+      </span>
+    </div>
+    <div class="facts"><button class="ibtn press" data-act="restore" data-id="${p.id}" title="Restore to Projects" aria-label="Restore ${esc(p.name)}">${svg(14, '<rect x="3" y="4" width="18" height="5" rx="1.5"></rect><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"></path><path d="M12 18v-6M9.5 14.5 12 12l2.5 2.5"></path>')}</button><button class="ibtn del press" data-act="deleteArch" data-id="${p.id}" title="Delete now" aria-label="Delete ${esc(p.name)}">${I.trash()}</button><button class="ibtn press${p.pinned ? ' on' : ''}" data-act="pin" data-id="${p.id}" aria-pressed="${!!p.pinned}" title="${p.pinned ? 'Unpin (restarts the countdown)' : 'Pin to keep'}" aria-label="${p.pinned ? 'Unpin' : 'Pin'} ${esc(p.name)}">${svg(14, '<path d="M9 4h6l-1 6 3 3v2H7v-2l3-3z"></path><path d="M12 15v5"></path>')}</button></div>
+  </div>`;
+}
+function restoreArch(id) {
+  const p = S.projects[id]; if (!p || U.leaving[id]) return;
+  const before = clone(p);
+  const done = () => { delete U.leaving[id]; const q = clone(p); q.archived = false; q.archivedAt = null; q.pinned = false; putProject(q); pushUndo(p.name + ' restored to Projects', () => { U.back[id] = true; putProject(before, { keepTime: true }); setTimeout(() => { delete U.back[id]; }, 500); }); };
+  if (!motionOK()) return done();
+  U.leaving[id] = 'lift'; render(); setTimeout(done, 460);
+}
+
+/* ============================================================
+   PAGE — Settings (full)
    ============================================================ */
 function pageSettings() {
   const TH = { sand: ['#F2ECE1', '#EAE2D3', '#FBF8F2', '#2A2924', '#3E5940', 'Default'], moss: ['#121613', '#151915', '#1A1F1B', '#E6E2D6', '#A8C096', 'Dark'], stone: ['#ECECE8', '#E3E3DE', '#F9F9F7', '#25272A', '#44574B', 'Neutral'] };
@@ -909,14 +1175,55 @@ function pageSettings() {
   const [a, b] = syncText();
   const np = activeProjects().length, na = Object.values(S.projects).filter(p => p.archived).length;
   const scr = Math.round(window.innerWidth) + ' × ' + Math.round(window.innerHeight) + (window.devicePixelRatio && window.devicePixelRatio !== 1 ? ' · ' + Math.round(window.devicePixelRatio * 100) + '% scaling' : '');
+  // designers
+  const dCount = (id) => Object.values(S.projects).filter(p => p.designer === id).length;
+  const m = U.menu;
+  const drows = designers().map(d => {
+    const n = dCount(d.id); const open = m && m.kind === 'dcolor' && m.key === d.id;
+    return `<div class="drow2"><div style="position:relative"><button class="swbtn press" data-act="menu" data-kind="dcolor" data-key="${d.id}" title="Change color" aria-haspopup="menu" aria-expanded="${open}" style="background:var(--c-${d.color})"></button>${open ? `<div class="smenu left pop-in" role="menu" style="min-width:160px">${COLORS.map(([c, l]) => `<button class="mi${c === d.color ? ' cur' : ''}" data-act="dsetColor" data-id="${d.id}" data-v="${c}"><span class="dot" style="width:12px;height:12px;background:var(--c-${c})"></span>${l}</button>`).join('')}</div>` : ''}</div>
+      <label style="min-width:0"><span class="sr">Designer name</span><input class="tin" id="dn-${d.id}" value="${esc(d.name)}" data-scommit="dname" data-id="${d.id}" autocomplete="off"></label>
+      <span class="mono" style="font-size:12px;color:var(--muted);text-align:right">${n} ${n === 1 ? 'project' : 'projects'}</span>
+      <button class="ibtn del press" data-act="ddel" data-id="${d.id}" ${n ? 'disabled' : ''} title="${n ? 'Reassign their projects before removing' : 'Remove ' + esc(d.name)}" aria-label="Remove ${esc(d.name)}">${I.x(14)}</button></div>`;
+  }).join('');
+  // crews
+  const cCount = (c) => Object.values(S.projects).filter(p => !p.archived && p.crew === c).length;
+  const crows = (S.settings.crews || []).map((c, i) => { const n = cCount(c); return `<div class="crow2"><label style="min-width:0"><span class="sr">Crew leader</span><input class="tin" id="cr-${i}" value="${esc(c)}" data-scommit="crew" data-i="${i}" autocomplete="off"></label><span class="mono" style="font-size:11.5px;color:var(--muted);text-align:right">${n ? n + (n === 1 ? ' job' : ' jobs') : ''}</span><button class="ibtn del press" data-act="cdel" data-i="${i}" ${n ? 'disabled' : ''} title="${n ? 'Reassign their jobs on Operations before removing' : 'Remove ' + esc(c)}" aria-label="Remove ${esc(c)}">${I.x(14)}</button></div>`; }).join('');
+  const ret = retentionDays();
   return `<div class="phead"><div><div class="eyebrow">Version ${APP_VERSION} · window ${scr}</div><h1>Settings</h1></div></div>
   <section class="card scard rise"><h2>Appearance</h2><p class="sub">Saved on this device.</p><div class="tcards">${tcards}</div>
     <div class="rowline"><span><span style="display:block;font-size:13.5px;font-weight:500">Motion</span><span style="font-size:12.5px;color:var(--muted)">Animations for completing steps, stages and opening folders. Off keeps everything instant.</span></span><button class="tog${U.motion ? ' on' : ''}" data-act="motion" aria-pressed="${U.motion}" aria-label="Animations"></button></div></section>
-  <section class="card scard rise" style="animation-delay:60ms"><h2>Data &amp; backup</h2><p class="sub">Everything saves automatically and stays in sync across your devices.</p>
+  <section class="card scard rise" style="animation-delay:40ms"><h2>Designers</h2><p class="sub">Rename in place and pick each designer’s color. A designer can be removed once they have no projects.</p>${drows}
+    <label style="display:flex;align-items:center;gap:10px;padding-top:10px;border-top:1px solid var(--line);color:var(--muted)"><span style="width:22px;display:grid;place-items:center">${I.plus}</span><span class="sr">Add a designer</span><input class="addin" id="add-designer" placeholder="Add designer — press Enter" data-sadd="designer" autocomplete="off"></label></section>
+  <section class="card scard rise" style="animation-delay:80ms"><h2>Crew leaders</h2><p class="sub">Used by the Crew leader dropdown on Operations. ${(S.settings.crews || []).length} crew leaders · sorted A–Z there. Renaming updates every install.</p><div class="crgrid">${crows}</div>
+    <label style="display:flex;align-items:center;gap:10px;padding-top:10px;border-top:1px solid var(--line);color:var(--muted)"><span style="width:22px;display:grid;place-items:center">${I.plus}</span><span class="sr">Add a crew leader</span><input class="addin" id="add-crew" placeholder="Add crew leader — press Enter" data-sadd="crew" autocomplete="off"></label></section>
+  <section class="card scard rise" style="animation-delay:120ms"><h2>Workflow &amp; archive</h2><p class="sub">The step template every project uses, and how long archived projects are kept.</p>
+    <div class="rowline"><span><span style="display:block;font-size:13.5px;font-weight:500">Workflow template</span><span style="font-size:12.5px;color:var(--muted)">${S.workflow.length} steps across 7 stages.</span></span><button class="btn press" data-act="navx" data-v="#/workflow">${I.flow}Edit workflow ›</button></div>
+    <div class="rowline"><span><span style="display:block;font-size:13.5px;font-weight:500">Auto-delete archived projects</span><span style="font-size:12.5px;color:var(--muted)">Keeps the archive tidy. Pinned projects are always kept.</span></span><select class="sel" data-change="retention">${[[7, 'After 7 days'], [14, 'After 14 days'], [30, 'After 30 days'], [0, 'Never']].map(([v, l]) => `<option value="${v}"${ret === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div></section>
+  <section class="card scard rise" style="animation-delay:160ms"><h2>Data &amp; backup</h2><p class="sub">Everything saves automatically and stays in sync across your devices.</p>
     <div class="rowline"><span style="display:flex;align-items:center;gap:10px"><span class="syncind sync-${S.sync.state}" style="margin:0;padding:0;pointer-events:none"><span class="sdot"></span></span><span><span style="display:block;font-size:13.5px;font-weight:500">${esc(a)}${b ? ' · ' + esc(b) : ''}</span><span style="font-size:12.5px;color:var(--muted)">${esc(syncText()[2])}</span></span></span></div>
     <div class="rowline"><span><span style="display:block;font-size:13.5px;font-weight:500">Works offline</span><span style="font-size:12.5px;color:var(--muted)">Changes made without a connection are kept on this device and sent as soon as you’re back online. Other devices update live.</span></span><span class="mono" style="font-size:12px;color:var(--muted);flex:none">${np} ${np === 1 ? 'project' : 'projects'} · ${na} archived</span></div>
-    <div class="rowline"><span><span style="display:block;font-size:13.5px;font-weight:500">Backup</span><span style="font-size:12.5px;color:var(--muted)">Download a copy of all projects, the workflow and settings to keep somewhere safe.</span></span><button class="btn press" data-act="backup">${I.download}Download backup</button></div></section>
-  <section class="card scard rise" style="animation-delay:120ms"><h2>More settings</h2><p class="sub" style="margin:0">Designers, crew leaders, the Workflow shortcut, archive cleanout and Restore arrive in round 3.</p></section>`;
+    <div class="rowline"><span><span style="display:block;font-size:13.5px;font-weight:500">Backup</span><span style="font-size:12.5px;color:var(--muted)">Download a copy of all projects, the workflow and settings${S.settings.lastBackup ? ' · last downloaded ' + ago(S.settings.lastBackup) : ''}. Restore loads a backup file back in (with Undo).</span></span><span style="display:flex;gap:8px;flex:none"><button class="btn press" data-act="backup">${I.download}Download backup</button><label class="btn press" style="cursor:pointer">Restore…<input type="file" accept="application/json,.json" data-change="restore" style="display:none"></label></span></div></section>`;
+}
+function restoreBackup(file) {
+  const rd = new FileReader();
+  rd.onload = () => {
+    let data; try { data = JSON.parse(rd.result); } catch (e) { showToast('That file isn’t a Green Screen backup', false); return; }
+    if (!data || typeof data.projects !== 'object') { showToast('That file isn’t a Green Screen backup', false); return; }
+    const before = { projects: clone(S.projects), workflow: clone(S.workflow), settings: clone(S.settings) };
+    const incoming = data.projects;
+    Object.values(incoming).forEach(p => { if (p && p.id) putProject(clone(p), { keepTime: true }); });
+    if (Array.isArray(data.workflow)) putMeta('workflow', data.workflow);
+    if (data.settings) putMeta('settings', Object.assign(clone(DEFAULT_SETTINGS), data.settings));
+    pushUndo('Backup restored · ' + Object.keys(incoming).length + ' projects', () => {
+      Object.keys(incoming).forEach(id => { if (before.projects[id]) putProject(before.projects[id], { keepTime: true }); else removeProject(id); });
+      putMeta('workflow', before.workflow); putMeta('settings', before.settings);
+    });
+  };
+  rd.readAsText(file);
+}
+function settingsChange(fn, label) {
+  const before = clone(S.settings); const s2 = clone(S.settings); fn(s2); putMeta('settings', s2);
+  if (label) pushUndo(label, () => putMeta('settings', before));
 }
 
 /* ============================================================
@@ -1071,7 +1378,8 @@ app.addEventListener('focusout', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.commit) { U.busy = false; commitField(el); }
   if (el.dataset && el.dataset.wcommit) { U.busy = false; wfCommit(el); }
-  const ae = document.activeElement; if (pendingRender && !(ae && ae.dataset && (ae.dataset.commit || ae.dataset.wcommit))) { pendingRender = false; render(); }
+  if (el.dataset && el.dataset.scommit) { U.busy = false; settingsCommit(el); }
+  const ae = document.activeElement; if (pendingRender && !(ae && ae.dataset && (ae.dataset.commit || ae.dataset.wcommit || ae.dataset.scommit))) { pendingRender = false; render(); }
 });
 app.addEventListener('focusin', (e) => { if (e.target.dataset && e.target.dataset.commit) U.busy = false; });
 
@@ -1082,7 +1390,15 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); U.np = null; renderModal(); return; }
     if (e.key === 'Enter' && !(t.dataset && t.dataset.act === 'npClose') && (t === document.body || document.getElementById('overlay').contains(t))) { e.preventDefault(); npCreate(); return; }
   }
+  if (U.email && e.key === 'Escape') { e.preventDefault(); document.querySelector('[data-act="emClose"]').click(); return; }
   if (e.key === 'Escape' && U.menu) { U.menu = null; render(); return; }
+  if (t.dataset && t.dataset.scommit && (e.key === 'Enter' || e.key === 'Escape')) { if (e.key === 'Escape') { t.value = t.dataset.scommit === 'crew' ? S.settings.crews[Number(t.dataset.i)] : designer(t.dataset.id).name; } e.preventDefault(); t.blur(); return; }
+  if (t.dataset && t.dataset.sadd && e.key === 'Enter') {
+    e.preventDefault(); const v = t.value.trim(); if (!v) return; const kind = t.dataset.sadd;
+    if (kind === 'crew') { if ((S.settings.crews || []).some(c => c.toLowerCase() === v.toLowerCase())) { showToast(v + ' is already on the list', false); return; } settingsChange(st => { st.crews = (st.crews || []).concat([v]); }, v + ' added'); }
+    else { const id = v.toLowerCase().replace(/[^a-z0-9]+/g, '') + Math.random().toString(36).slice(2, 5); const used = designers().map(d => d.color); const color = (COLORS.find(([c]) => !used.includes(c)) || COLORS[0])[0]; settingsChange(st => { st.designers = st.designers.concat([{ id, name: v, color }]); }, v + ' added'); }
+    setTimeout(() => { const el = document.getElementById(kind === 'crew' ? 'add-crew' : 'add-designer'); if (el) { el.value = ''; el.focus(); } }, 0); return;
+  }
   if (t.dataset && t.dataset.commit && t.tagName === 'INPUT' && (e.key === 'Enter' || e.key === 'Escape')) {
     if (e.key === 'Escape') { const p = S.projects[t.dataset.id || U.route.id]; if (p) t.value = p[t.dataset.commit] || ''; }
     e.preventDefault(); t.blur(); return;
@@ -1117,6 +1433,9 @@ document.addEventListener('input', (e) => {
     }
     return;
   }
+  if (t.dataset && t.dataset.em && U.email && t.tagName !== 'SELECT') { U.email.d[t.dataset.em] = t.value; U.email.d.touched = true; emPreview(); emSave(); return; }
+  if (t.dataset && t.dataset.empara === 'text' && U.email) { const x = U.email.d.extras.find(y => y.id === t.dataset.x); if (x) { x.text = t.value; U.email.d.touched = true; emPreview(); emSave(); } return; }
+  if (t.dataset && t.dataset.scommit) U.busy = true;
   if (t.dataset && t.dataset.input === 'search') { U.search = t.value; render(); }
   if (t.dataset && t.dataset.input === 'tsearch') { U.tsearch = t.value; render(); }
   if (t.dataset && t.dataset.wcommit) U.busy = true;
@@ -1125,6 +1444,13 @@ document.addEventListener('input', (e) => {
 document.addEventListener('change', (e) => {
   const t = e.target;
   if (t.dataset && t.dataset.change === 'sort') { U.sort = t.value; lsSet(LS.sort, U.sort); render(); }
+  if (t.dataset && t.dataset.change === 'pickInstall' && t.value) { const p = S.projects[t.dataset.pid]; U.menu = null; if (p) mutate(p.id, q => { q.installDate = t.value; }, shortName(p.name) + ' · install ' + installLabel(t.value)); }
+  if (t.dataset && t.dataset.change === 'crew') { const p = S.projects[t.dataset.pid]; if (p) mutate(p.id, q => { q.crew = t.value; }, t.value ? shortName(p.name) + ' · crew leader ' + t.value : shortName(p.name) + ' · crew leader cleared'); }
+  if (t.dataset && t.dataset.change === 'asort') { U.asort = t.value; lsSet('gs5:asort', t.value); render(); }
+  if (t.dataset && t.dataset.change === 'retention') { const v = Number(t.value); settingsChange(st => { st.retention = v; }, v ? 'Archived projects now delete after ' + v + ' days' : 'Auto-delete turned off'); }
+  if (t.dataset && t.dataset.change === 'restore' && t.files && t.files[0]) { restoreBackup(t.files[0]); t.value = ''; }
+  if (t.dataset && t.dataset.em && U.email && t.tagName === 'SELECT') { U.email.d[t.dataset.em] = t.value; U.email.d.touched = true; emPreview(); emSave(); }
+  if (t.dataset && t.dataset.empara === 'pos' && U.email) { const x = U.email.d.extras.find(y => y.id === t.dataset.x); if (x) { x.pos = t.value; U.email.d.touched = true; emPreview(); emSave(); } }
   if (t.dataset && t.dataset.change === 'tsort') { U.tsort = t.value; lsSet('gs5:tsort', U.tsort); render(); }
   if (t.dataset && t.dataset.change === 'pickDue' && t.value) { const p = (t.dataset.pid && S.projects[t.dataset.pid]) || curP(); const k = t.dataset.k; const x = p && getItem(p, k); U.menu = null; if (x) mutate(p.id, q => setItem(q, k, { due: t.value }), 'Target date set to ' + fmtDay(t.value)); }
 });
@@ -1171,6 +1497,37 @@ app.addEventListener('drop', (e) => {
   wfChange(wf => { const i = wf.findIndex(x => x.id === from); const item = wf.splice(i, 1)[0]; let j = wf.findIndex(x => x.id === to); if (after) j++; wf.splice(j, 0, item); }, '“' + w.title + '” moved');
 });
 app.addEventListener('dragend', () => { U.wdrag = null; U.cdrag = null; document.querySelectorAll('.dropabove,.dropbelow,.dragging').forEach(n => n.classList.remove('dropabove', 'dropbelow', 'dragging')); });
+
+function settingsCommit(el) {
+  const v = el.value.trim();
+  if (el.dataset.scommit === 'dname') { const d = designer(el.dataset.id); if (!v) { el.value = d.name; return; } if (v === d.name) return; settingsChange(st => { st.designers.find(x => x.id === d.id).name = v; }, 'Renamed to ' + v); }
+  if (el.dataset.scommit === 'crew') {
+    const i = Number(el.dataset.i); const old = S.settings.crews[i]; if (!v) { el.value = old; return; } if (v === old) return;
+    const beforeS = clone(S.settings); const touched = Object.values(S.projects).filter(p => p.crew === old).map(p => clone(p));
+    const s2 = clone(S.settings); s2.crews[i] = v; putMeta('settings', s2);
+    touched.forEach(p => { const q = clone(p); q.crew = v; putProject(q, { keepTime: true }); });
+    pushUndo('Renamed to ' + v + (touched.length ? ' · ' + touched.length + (touched.length === 1 ? ' install' : ' installs') + ' updated' : ''), () => { putMeta('settings', beforeS); touched.forEach(p => putProject(p, { keepTime: true })); });
+  }
+}
+/* Operations: drag a job between Installing now and Upcoming */
+app.addEventListener('dragstart', (e) => {
+  const row = e.target.closest && e.target.closest('[data-opid][draggable]'); if (!row) return;
+  if (/^(INPUT|BUTTON|SELECT|A)$/.test(e.target.tagName)) { e.preventDefault(); return; }
+  U.odrag = row.dataset.opid; U.ofrom = row.dataset.zone; row.classList.add('dragging');
+  try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', U.odrag); } catch (x) {}
+});
+app.addEventListener('dragover', (e) => {
+  if (!U.odrag) return; const z = e.target.closest && e.target.closest('[data-dropzone]'); if (!z) return;
+  e.preventDefault(); document.querySelectorAll('[data-dropzone]').forEach(n => n.classList.toggle('dropping', n === z && z.dataset.dropzone !== U.ofrom));
+});
+app.addEventListener('drop', (e) => {
+  if (!U.odrag) return; const z = e.target.closest && e.target.closest('[data-dropzone]'); e.preventDefault();
+  const id = U.odrag, from = U.ofrom; U.odrag = null; U.ofrom = null;
+  document.querySelectorAll('.dropping,.dragging').forEach(n => n.classList.remove('dropping', 'dragging'));
+  if (!z || z.dataset.dropzone === from) return;
+  if (z.dataset.dropzone === 'now') startInstall(id); else pauseInstall(id);
+});
+app.addEventListener('dragend', () => { U.odrag = null; document.querySelectorAll('.dropping').forEach(n => n.classList.remove('dropping')); });
 
 function toggleStage(si) {
   const p = curP(); if (!p) return; const key = p.id + ':' + si; const cs = curStage(p);
@@ -1239,8 +1596,27 @@ document.addEventListener('click', (e) => {
     case 'notNow': if (p) mutate(p.id, q => { q.noArchivePrompt = true; }); break;
     case 'archiveProject': archiveCurrent(); break;
     case 'deleteProject': deleteCurrent(); break;
-    case 'goOps': go('#/operations', { exit: true }); break;
+    case 'goOps': go(a.dataset.email ? '#/operations/' + a.dataset.email : '#/operations', { exit: true }); break;
     case 'navx': go(v, { exit: true }); break;
+    case 'procBothAnim': procBothAnim(a.dataset.pid); break;
+    case 'openEmail': openEmail(a.dataset.pid); break;
+    case 'setInstall': closeMenu(); if (p) mutate(p.id, q => { q.installDate = v; }, v ? shortName(p.name) + ' · install ' + installLabel(v) : shortName(p.name) + ' · install date cleared'); break;
+    case 'startInstall': startInstall(a.dataset.pid); break;
+    case 'pauseInstall': pauseInstall(a.dataset.pid); break;
+    case 'progStep': if (p) { const x = getItem(p, k); const nv = isClosed(x.st.s) ? 'Not Started' : 'Done'; if (x.st.s === 'N/A') break; mutate(p.id, q => setItem(q, k, { s: nv, doneAt: nv === 'Done' ? todayISO() : '' }), '“' + x.title + '” ' + (nv === 'Done' ? 'checked' : 'unchecked') + ' · ' + shortName(p.name)); } break;
+    case 'emClose': clearTimeout(emSaveTimer); if (U.email) { const e = U.email; const pp = S.projects[e.pid]; if (pp && e.d.touched) { const q = clone(pp); q.emailDraft = clone(e.d); putProject(q, { keepTime: true }); } } U.email = null; renderEmail(); break;
+    case 'emTog': if (U.email) { U.email.d[v] = !U.email.d[v]; U.email.d.touched = true; renderEmail(); emSave(); } break;
+    case 'emAddPara': if (U.email) { const d = U.email.d; d.seq = (d.seq || 0) + 1; d.extras = (d.extras || []).concat([{ id: 'x' + d.seq, pos: 'end', text: '' }]); d.touched = true; renderEmail(); emSave(); setTimeout(() => { const el = document.getElementById('em-x-x' + d.seq); if (el) el.focus(); }, 0); } break;
+    case 'emDelPara': if (U.email) { U.email.d.extras = U.email.d.extras.filter(x => x.id !== a.dataset.x); U.email.d.touched = true; renderEmail(); emSave(); } break;
+    case 'emDefaults': if (U.email) { const d = U.email.d; const out = {}; EM_DEFAULT_KEYS.forEach(kk => { out[kk] = d[kk]; }); settingsChange(st => { st.opsEmailDefaults = out; }); U.email.note = 'Saved · new emails start with these'; const n = document.getElementById('em-note'); if (n) n.textContent = U.email.note; } break;
+    case 'emCopy': emCopy(); break;
+    case 'restore': restoreArch(a.dataset.id); break;
+    case 'restoreHere': if (p) { const before = clone(p); mutate(p.id, q => { q.archived = false; q.archivedAt = null; q.pinned = false; }, p.name + ' restored to Projects'); } break;
+    case 'deleteArch': removeFolder(a.dataset.id, 'gone'); break;
+    case 'pin': { const pp = S.projects[a.dataset.id]; if (pp) mutate(pp.id, q => { q.pinned = !q.pinned; if (!q.pinned) q.archivedAt = Date.now(); }, pp.pinned ? pp.name + ' unpinned · countdown restarted' : pp.name + ' pinned · kept'); break; }
+    case 'dsetColor': closeMenu(); settingsChange(st => { st.designers.find(d => d.id === a.dataset.id).color = v; }, designer(a.dataset.id).name + ' · ' + v); break;
+    case 'ddel': { const d = designer(a.dataset.id); settingsChange(st => { st.designers = st.designers.filter(x => x.id !== d.id); }, d.name + ' removed'); break; }
+    case 'cdel': { const i = Number(a.dataset.i); const c = S.settings.crews[i]; settingsChange(st => { st.crews.splice(i, 1); }, c + ' removed'); break; }
     case 'theme': U.theme = v; lsSet(LS.theme, v); render(); renderToast(); break;
     case 'motion': U.motion = !U.motion; lsSet(LS.motion, U.motion); render(); break;
     case 'backup': downloadBackup(); break;
@@ -1265,6 +1641,7 @@ function downloadBackup() {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'green-screen-backup-' + todayISO() + '.json';
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  settingsChange(st => { st.lastBackup = Date.now(); });
   showToast('Backup downloaded', false);
 }
 
@@ -1298,4 +1675,6 @@ U.route = parseRoute();
 render();
 renderToast();
 initCloud();
+if (LOCAL_ONLY) setTimeout(purgeArchive, 800);
+maybeOpenEmailFromRoute();
 window.GS = { S, U, render, putProject, version: APP_VERSION };

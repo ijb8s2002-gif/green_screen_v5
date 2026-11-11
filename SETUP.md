@@ -106,4 +106,36 @@ The new app shows the sprout icon on green. Your old app keeps its dark "G" icon
   - A step added to a stage a project has already finished is marked Done on that project automatically.
 - **Add to template:** on a project-only step, the new template icon promotes it to the Workflow for every project.
 
-**Coming in round 3:** Operations (big board, install schedule, crew leaders, the ops email builder), Archived with the 14-day cleanout, and the rest of Settings (designers, crew leaders, Restore).
+## What round 3 adds (v5.1.0)
+- **Operations (the big board):**
+  - **Needs processing:** sold jobs in Finalize & Process missing step 25 or 26 (jobs where either is N/A are left off).
+    - The two pills check each step; the circle checks both, and the job slides away with Undo.
+    - "Sold Xd" turns rust after 5 days.
+  - **Installing now** and **Upcoming:**
+    - Drag a job between the sections, or use the ↑ / ↓ button on touch screens.
+    - Starting an install checks the pre-install steps and sets today as the install date if none is set.
+    - Moving a job back reopens the pre-install and install steps.
+  - Each install row has:
+    - an install date menu (Today / Tomorrow / By Friday / Next Monday / Monday after / Pick / Clear)
+    - a crew leader dropdown (A–Z)
+    - a progress pill you can tap for a checklist with "Open project ›"
+  - The pill turns rust when the install is within 3 days and pre-install isn't finished.
+- **Ops email builder:** "Write email" on a job, or EMAIL › / OPS EMAIL › on step 26 anywhere, opens your email form in a side panel.
+  - **What it fills in:** the crew leader's first name, the install week, and the greeting by time of day. Customer name is always left blank.
+  - **Blanks** show in ochre and are counted.
+  - **Copy email** copies the finished text.
+  - **Drafts** save with the project.
+  - **"Save the names & tags as my defaults"** syncs to every device.
+- **Archived:** archived projects in kraft folders, with a countdown ("Deletes in 9 days", rust at 3 days or less).
+  - **Pin to keep** stops the countdown.
+  - **Restore** brings a project back to Projects.
+  - **Delete** removes it now.
+  - There are designer filters and three sorts.
+  - Opening an archived project shows a banner with **Restore to Projects**.
+  - The cleanout runs each time the app opens; 14 days by default, changeable in Settings.
+- **Settings:**
+  - **Designers:** rename, color, add, and remove once they have no projects.
+  - **Crew leaders:** rename (updates every install), add, and remove once they have no jobs.
+  - **Workflow & archive:** a shortcut to Workflow and the auto-delete setting (7 / 14 / 30 days / Never).
+  - **Data & backup:** Download backup (shows when you last did) and **Restore…** to load a backup file back in, with Undo.
+- **Project page stage bar:** fills instantly and snappily, like the New project form, instead of the staged glide.
