@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.0.1-r1';
+const APP_VERSION = '5.0.3-r1';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -326,6 +326,8 @@ function render() {
   const a = document.activeElement;
   let keep = null;
   if (a && a.id && /^(INPUT|TEXTAREA)$/.test(a.tagName) && app.contains(a)) keep = { id: a.id, v: a.value, s: a.selectionStart, e: a.selectionEnd };
+  const oldRow = document.getElementById('segrow');
+  const oldSeg = oldRow ? { pid: oldRow.dataset.pid, cls: [...oldRow.children].map(b => b.className.replace(/\bpv\b/g, '').trim()) } : null;
   const root = app.firstElementChild;
   if (!root || !root.classList.contains('gs-root')) {
     app.innerHTML = `<div class="gs-root"><aside class="side"></aside><main class="main"></main></div><div id="overlay"></div><div id="toastbox"></div><div id="updbox"></div>`;
@@ -339,12 +341,29 @@ function render() {
   main.className = 'main' + (U.route.page === 'project' ? ' narrow' : '') + (U.enter ? ' enter' : '') + (U.gone ? ' gone' : '');
   main.innerHTML = html;
   U.enter = false;
+  animateStageBar(oldSeg);
   if (keep) {
     const el = document.getElementById(keep.id);
     if (el) { el.value = keep.v; el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} }
   }
   renderSync();
   const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute('content', getComputedStyle(r).getPropertyValue('--bg').trim() || '#F2ECE1');
+}
+function animateStageBar(old) {
+  const row = document.getElementById('segrow');
+  if (!row || !old || old.pid !== row.dataset.pid || !motionOK()) return;
+  const btns = [...row.children];
+  const finals = btns.map(b => b.className);
+  const rank = (c) => /seg-on/.test(c) ? 2 : /seg-now/.test(c) ? 1 : 0;
+  const changed = btns.map((b, j) => old.cls[j] !== undefined && old.cls[j] !== finals[j]);
+  if (!changed.some(Boolean)) return;
+  const forward = finals.reduce((n, c) => n + rank(c), 0) >= old.cls.reduce((n, c) => n + rank(c), 0);
+  btns.forEach((b, j) => { if (changed[j]) { b.className = old.cls[j]; b.style.setProperty('--d', '0ms'); } });
+  void row.offsetWidth; // lock in the old state, then glide to the new one
+  const idx = btns.map((_, j) => j).filter(j => changed[j]);
+  const order = forward ? idx : idx.slice().reverse();
+  order.forEach((j, n) => { btns[j].style.setProperty('--d', (n * 120) + 'ms'); btns[j].className = finals[j]; });
+  setTimeout(() => btns.forEach(b => b.style.removeProperty('--d')), order.length * 120 + 700);
 }
 function renderSide() {
   const pg = U.route.page;
@@ -509,14 +528,15 @@ function pageProject() {
   const askArchive = cs === 6 && !p.noArchivePrompt && !U.gone;
   const archBar = askArchive ? `<div class="archbar pop-in" role="status"><span class="dico">${I.tick(12)}</span><span><span style="color:var(--ink);font-weight:500">Project Install is complete.</span> Archive this project? Warranty steps stay open if you keep it.</span><span style="margin-left:auto;display:flex;gap:6px"><button class="btn pri press" data-act="archiveProject" style="font-size:13px;padding:7px 12px">${I.box(14)}Archive project</button><button class="btn press" data-act="notNow">Not now</button></span></div>` : '';
   // stage bar
-  const sw = U.sweep && U.sweep.pid === p.id ? U.sweep : null;
+  const hold = U.segHold && U.segHold.pid === p.id ? U.segHold.i : null;
+  const vcs = hold !== null ? hold : cs;
   const segs = STAGES.map((name, i) => {
-    const cls = i < cs ? 'seg-on' : i === cs ? 'seg-now' : '';
-    const anim = sw && sw.segs[i] !== undefined ? ` ${sw.kind}` : '';
+    const cls = i < vcs ? 'seg-on' : i === vcs ? 'seg-now' : '';
+    const anim = '';
     const title = i === cs ? name + ' — current stage' : 'Open to ' + name + (i > cs ? ' (marks earlier stages done)' : ' (reopens it and later stages)');
-    return `<button class="segbtn ${cls}${anim}" data-act="seg" data-i="${i}" data-seg="${i}" title="${esc(title)}" aria-label="${esc(title)}" style="--d:${sw && sw.segs[i] !== undefined ? sw.segs[i] * 110 : 0}ms"><span class="segtrack"><i></i></span><span class="segname">${name}</span></button>`;
+    return `<button class="segbtn ${cls}${anim}" data-act="seg" data-i="${i}" data-seg="${i}" title="${esc(title)}" aria-label="${esc(title)}"><span class="segtrack"><i></i></span><span class="segname">${name}</span></button>`;
   }).join('');
-  const stageCard = `<div class="card stagecard rise" data-cs="${cs}"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px"><span style="font-size:13px;color:var(--muted)">Stage · <span style="color:var(--ink);font-weight:500">${STAGES[cs]}</span></span><span class="mono" style="font-size:12px;color:var(--muted)">${pr.done} of ${pr.total} steps</span></div><div class="segrow" id="segrow">${segs}</div></div>`;
+  const stageCard = `<div class="card stagecard rise" data-cs="${cs}"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px"><span style="font-size:13px;color:var(--muted)">Stage · <span style="color:var(--ink);font-weight:500">${STAGES[cs]}</span></span><span class="mono" style="font-size:12px;color:var(--muted)">${pr.done} of ${pr.total} steps</span></div><div class="segrow" id="segrow" data-pid="${p.id}">${segs}</div></div>`;
   // completed bar
   let doneBar = '';
   if (cs > 0) {
@@ -603,7 +623,8 @@ function pageSettings() {
   const tcards = Object.entries(TH).map(([id, [bg, side, panel, ink, acc, note]]) => `<button class="tcard press${U.theme === id ? ' on' : ''}" data-act="theme" data-v="${id}" aria-pressed="${U.theme === id}"><span class="tprev" style="background:${bg}"><span style="width:28%;background:${side}"></span><span style="flex:1;padding:8px;display:flex;flex-direction:column;gap:6px"><span style="height:8px;width:60%;border-radius:3px;background:${ink};opacity:.8"></span><span style="flex:1;border-radius:5px;background:${panel};display:flex;align-items:flex-end;padding:5px"><span style="height:4px;width:70%;border-radius:2px;background:${acc}"></span></span></span></span><span style="display:flex;justify-content:space-between"><span style="font-weight:500">${id[0].toUpperCase() + id.slice(1)}</span><span class="muted" style="font-size:12px">${note}</span></span></button>`).join('');
   const [a, b] = syncText();
   const np = activeProjects().length, na = Object.values(S.projects).filter(p => p.archived).length;
-  return `<div class="phead"><div><div class="eyebrow">Version ${APP_VERSION}</div><h1>Settings</h1></div></div>
+  const scr = Math.round(window.innerWidth) + ' × ' + Math.round(window.innerHeight) + (window.devicePixelRatio && window.devicePixelRatio !== 1 ? ' · ' + Math.round(window.devicePixelRatio * 100) + '% scaling' : '');
+  return `<div class="phead"><div><div class="eyebrow">Version ${APP_VERSION} · window ${scr}</div><h1>Settings</h1></div></div>
   <section class="card scard rise"><h2>Appearance</h2><p class="sub">Saved on this device.</p><div class="tcards">${tcards}</div>
     <div class="rowline"><span><span style="display:block;font-size:13.5px;font-weight:500">Motion</span><span style="font-size:12.5px;color:var(--muted)">Animations for completing steps, stages and opening folders. Off keeps everything instant.</span></span><button class="tog${U.motion ? ' on' : ''}" data-act="motion" aria-pressed="${U.motion}" aria-label="Animations"></button></div></section>
   <section class="card scard rise" style="animation-delay:60ms"><h2>Data &amp; backup</h2><p class="sub">Everything saves automatically and stays in sync across your devices.</p>
@@ -688,10 +709,9 @@ function completeThrough(idx) {
   const ids = {}; targets.filter(x => x.stage >= cs).forEach((x, i) => { ids[x.key] = i; });
   const label = idx > cs ? STAGES[cs] + ' – ' + STAGES[idx] + ' marked complete' : STAGES[idx] + ' marked complete';
   const commit = () => {
-    U.casc = null;
+    U.casc = null; U.segHold = null;
     for (let k = 0; k <= idx; k++) delete U.open[p.id + ':' + k];
     const segs = {}; for (let k = cs, n = 0; k <= idx; k++, n++) segs[k] = n;
-    U.sweep = motionOK() ? { pid: p.id, segs, kind: 'sweep' } : null;
     mutate(p.id, q => { targets.forEach(x => setItem(q, x.key, { s: 'Done', doneAt: todayISO() })); }, label);
     setTimeout(() => { U.sweep = null; }, 1300);
   };
@@ -708,20 +728,23 @@ function reopenFrom(idx) {
   Object.keys(U.open).forEach(k => { if (k.startsWith(p.id + ':')) delete U.open[k]; });
   U.open[p.id + ':' + idx] = true; U.showDone[p.id] = false;
   const segs = {}; for (let k = Math.max(cs, idx), n = 0; k >= idx; k--, n++) segs[k] = n;
-  if (motionOK()) { U.unc = { pid: p.id, ids }; U.sweep = { pid: p.id, segs, kind: 'drain' }; }
+  if (motionOK()) U.unc = { pid: p.id, ids };
   mutate(p.id, q => { toReset.forEach(x => setItem(q, x.key, { s: 'Not Started', doneAt: '' })); q.noArchivePrompt = false; }, 'Back to ' + STAGES[idx] + (idx < 6 ? ' · later stages reopened' : ''));
   setTimeout(() => { U.unc = null; U.sweep = null; }, Math.max(1100, inStage.length * 45 + 800));
 }
 function segPick(i) {
-  const p = curP(); if (!p) return; const cs = curStage(p);
-  if (i < cs) reopenFrom(i); else if (i > cs) completeThrough(i - 1);
+  const p = curP(); if (!p || U.casc) return; const cs = curStage(p);
+  if (i === cs) return;
+  U.segHold = { pid: p.id, i };
+  if (i < cs) reopenFrom(i); else completeThrough(i - 1);
+  if (!U.casc) U.segHold = null;
 }
 function previewSeg(i) {
   const row = document.getElementById('segrow'); if (!row) return;
   const cs = Number(row.closest('[data-cs]').dataset.cs);
   [...row.children].forEach((b, j) => {
-    b.classList.remove('seg-on', 'seg-now', 'seg-ghost', 'pv');
-    if (i === null || i === cs) { b.classList.add(j < cs ? 'seg-on' : j === cs ? 'seg-now' : 'x'); }
+    b.classList.remove('seg-on', 'seg-now', 'seg-ghost', 'pv', 'x');
+    if (i === null || i === cs) { const c = j < cs ? 'seg-on' : j === cs ? 'seg-now' : ''; if (c) b.classList.add(c); }
     else { b.classList.add('pv', j < i ? 'seg-on' : j === i ? 'seg-now' : 'seg-ghost'); }
   });
 }
@@ -879,7 +902,7 @@ document.addEventListener('click', (e) => {
     case 'complete': completeThrough(Number(a.dataset.i)); break;
     case 'reopen': reopenFrom(Number(a.dataset.i)); break;
     case 'toggleDone': if (p) { U.showDone[p.id] = !U.showDone[p.id]; render(); } break;
-    case 'seg': previewSeg(null); segPick(Number(a.dataset.i)); break;
+    case 'seg': segPick(Number(a.dataset.i)); break;
     case 'notNow': if (p) mutate(p.id, q => { q.noArchivePrompt = true; }); break;
     case 'archiveProject': archiveCurrent(); break;
     case 'deleteProject': deleteCurrent(); break;

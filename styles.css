@@ -50,7 +50,10 @@ a{color:inherit}
 .side.collapsed .pbar{height:0;opacity:0}
 .pop{position:absolute;left:calc(100% + 16px);top:50%;width:220px;margin-top:-34px;padding:12px;border-radius:10px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadowHover);display:flex;flex-direction:column;gap:8px;opacity:0;visibility:hidden;transform:translateX(-6px);pointer-events:none;z-index:30}
 .side.collapsed .proj:hover .pop,.side.collapsed .proj:focus-visible .pop{opacity:1;visibility:visible;transform:none}
-.sideprojs{display:flex;flex-direction:column;gap:2px;min-height:0;overflow:auto}
+.sideprojs{display:flex;flex-direction:column;gap:2px;min-height:0;overflow-x:hidden;overflow-y:auto;scrollbar-width:none}
+.sideprojs::-webkit-scrollbar{display:none}
+.proj .lbl{flex:1 1 auto;min-width:0;max-width:none}
+.side.collapsed .proj .lbl{flex:0 0 0;max-width:0}
 .side.collapsed .sideprojs{overflow:visible}
 .syncind{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;font-size:12.5px;color:var(--muted);text-decoration:none;margin-top:auto;flex:none}
 .syncind:hover{background:var(--hover);color:var(--ink)}
@@ -223,7 +226,8 @@ h2{margin:0;font-size:15px;font-weight:600}
 .segbtn{border:0;background:transparent;padding:6px 0;cursor:pointer;display:flex;flex-direction:column;gap:7px;text-align:left;min-width:0}
 .segtrack{display:block;height:6px;border-radius:3px;background:var(--track);position:relative;overflow:hidden;transition:height .15s}
 .segbtn:hover .segtrack{height:9px}
-.segtrack i{position:absolute;inset:0;background:var(--accent);transform-origin:left;transform:scaleX(0);transition:transform .45s cubic-bezier(.3,.7,.2,1),opacity .2s}
+.segtrack i{position:absolute;inset:0;background:var(--accent);transform-origin:left;transform:scaleX(0);transition:transform .55s cubic-bezier(.45,0,.2,1) var(--d,0ms),opacity .35s ease var(--d,0ms);will-change:transform}
+.segbtn.pv .segtrack i{transition-duration:.18s,.18s;transition-delay:0ms,0ms}
 .seg-on .segtrack i{transform:scaleX(1)}
 .seg-now .segtrack i{transform:scaleX(1);opacity:.45}
 .seg-ghost .segtrack i{transform:scaleX(0)}
@@ -286,10 +290,6 @@ h2{margin:0;font-size:15px;font-weight:600}
 .opslink{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12px;padding:4px 10px;border-radius:99px;cursor:pointer;white-space:nowrap;text-decoration:none}
 .opslink:hover{color:var(--prog);background:var(--progBg);border-color:transparent}
 .opslink.sm{font-size:10.5px;padding:2px 8px;font-family:'Geist Mono',monospace;letter-spacing:.04em}
-.segbtn.sweep .segtrack i{animation:segsweep .45s cubic-bezier(.3,.7,.2,1) backwards;animation-delay:var(--d)}
-@keyframes segsweep{from{transform:scaleX(0)}}
-.segbtn.drain .segtrack i{animation:segdrain .4s ease backwards;animation-delay:var(--d)}
-@keyframes segdrain{from{transform:scaleX(1);opacity:1}}
 #overlay,#toastbox,#updbox{font-family:'Geist',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.45;color:var(--ink)}
 .main.gone>*:not(.gonebar){opacity:.32;filter:grayscale(.5);pointer-events:none}
 
