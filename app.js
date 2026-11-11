@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.0.3-r1';
+const APP_VERSION = '5.0.4-r1';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -257,7 +257,30 @@ function setItem(p, key, patch) {
   else { const c = (p.custom || []).find(x => x.id === key); if (c) Object.assign(c, patch); }
 }
 function getItem(p, key) { return projItems(p).find(x => x.key === key); }
-function suggest(x) { return !!x.st.due && daysFrom(x.st.due) <= 3 && x.st.p !== 'URGENT' && !isClosed(x.st.s) && !x.st.dis; }
+/* Priority suggestions (business days, tiered):
+   overdue → Urgent · due within 2 business days → Urgent · within 5 business days → Medium.
+   Shown only when that level is above the step's current priority. Dismiss hides it until the
+   suggestion moves up a level (e.g. dismissing "Medium" brings it back when "Urgent" is due). */
+function bizDays(iso) {
+  const d = parseISO(iso); if (!d) return null;
+  const t = today0();
+  if (d < t) return -1;
+  let n = 0; const c = new Date(t);
+  while (c < d) { c.setDate(c.getDate() + 1); const w = c.getDay(); if (w !== 0 && w !== 6) n++; }
+  return n;
+}
+function suggestion(x) {
+  if (!x.st.due || isClosed(x.st.s)) return null;
+  const bd = bizDays(x.st.due); if (bd === null) return null;
+  const overdue = bd < 0;
+  const target = overdue || bd <= 2 ? 'URGENT' : bd <= 5 ? 'MEDIUM' : null;
+  if (!target || LEVELS.indexOf(target) <= LEVELS.indexOf(x.st.p)) return null;
+  const dis = x.st.dis === true ? 'URGENT' : x.st.dis;
+  if (dis && LEVELS.indexOf(dis) >= LEVELS.indexOf(target)) return null;
+  const when = overdue ? dueLabel(x.st.due) : bd === 0 ? 'Due today' : 'Due ' + dueLabel(x.st.due) + ' · ' + bd + (bd === 1 ? ' business day away' : ' business days away');
+  return { target, overdue, when };
+}
+function suggest(x) { return !!suggestion(x); }
 function activeProjects() { return Object.values(S.projects).filter(p => !p.archived); }
 function stageCounts(p, items) {
   items = items || projItems(p); const cs = curStage(p, items);
@@ -587,12 +610,12 @@ function rowHtml(p, x) {
   const dueMenu = dOpen ? `<div class="smenu pop-in" role="menu" style="min-width:210px"><div class="mhead">Target date</div>${quickDates().map(q => `<button class="mi" role="menuitem" data-act="setDue" data-k="${k}" data-v="${q.iso}">${q.label}<span class="hint">${q.hint}</span></button>`).join('')}<label class="mpick">Pick a date<input type="date" value="${st.due}" data-change="pickDue" data-k="${k}"></label>${hasDue ? `<button class="mi danger" role="menuitem" data-act="setDue" data-k="${k}" data-v="">Clear date</button>` : ''}</div>` : '';
   const due = `<div style="position:relative;min-width:0"><button class="duebtn press tone-${dueTone(st.due)}${hasDue ? '' : ' empty'}" data-act="menu" data-kind="due" data-key="${mk}" aria-haspopup="menu" aria-expanded="${dOpen}" title="Set target date">${I.cal}${hasDue ? esc(dueLabel(st.due)) : 'Set date'}</button>${dueMenu}</div>`;
   // priority
-  const sug = suggest(x);
+  const sg = suggestion(x); const sug = !!sg;
   const pOpen = m && m.kind === 'pri' && m.key === mk;
   const nextLv = LEVELS[Math.min(LEVELS.indexOf(st.p) + 1, 2)];
   const bars = (lv) => `<span class="bars lv-${lv}"><i class="on"></i><i class="${lv !== 'LOW' ? 'on' : ''}"></i><i class="${lv === 'URGENT' ? 'on' : ''}"></i></span>`;
-  const priMenu = pOpen ? `<div class="smenu pop-in" role="menu" style="min-width:190px">${sug ? `<div class="sugbox">Due ${esc(dueLabel(st.due))} · within 3 days<span style="display:flex;gap:6px"><button class="sugbtn press" data-act="raise" data-k="${k}">${I.arrowUp}Raise to ${PL[nextLv]}</button><button class="sugbtn plain press" data-act="dismiss" data-k="${k}">Dismiss</button></span></div>` : ''}${LEVELS.map(lv => `<button class="mi${lv === st.p ? ' cur' : ''}" role="menuitemradio" aria-checked="${lv === st.p}" data-act="setPri" data-k="${k}" data-v="${lv}">${bars(lv)}${PL[lv]}</button>`).join('')}</div>` : '';
-  const pri = `<div style="position:relative"><button class="pbtn press tile-${st.p}" data-act="menu" data-kind="pri" data-key="${mk}" aria-haspopup="menu" aria-expanded="${pOpen}" title="Priority: ${PL[st.p]}${sug ? ' — due soon, consider raising' : ''}" aria-label="Priority: ${PL[st.p]}">${bars(st.p)}${sug ? `<span class="sugdot" aria-hidden="true">${I.arrowUp}</span>` : ''}</button>${priMenu}</div>`;
+  const priMenu = pOpen ? `<div class="smenu pop-in" role="menu" style="min-width:190px">${sug ? `<div class="sugbox${sg.overdue ? ' late' : ''}">${esc(sg.when)}<span style="display:flex;gap:6px"><button class="sugbtn press" data-act="raise" data-k="${k}">${I.arrowUp}Raise to ${PL[sg.target]}</button><button class="sugbtn plain press" data-act="dismiss" data-k="${k}">Dismiss</button></span></div>` : ''}${LEVELS.map(lv => `<button class="mi${lv === st.p ? ' cur' : ''}" role="menuitemradio" aria-checked="${lv === st.p}" data-act="setPri" data-k="${k}" data-v="${lv}">${bars(lv)}${PL[lv]}</button>`).join('')}</div>` : '';
+  const pri = `<div style="position:relative"><button class="pbtn press tile-${st.p}" data-act="menu" data-kind="pri" data-key="${mk}" aria-haspopup="menu" aria-expanded="${pOpen}" title="Priority: ${PL[st.p]}${sug ? ' — ' + (sg.overdue ? 'overdue' : 'due soon') + ', consider raising to ' + PL[sg.target] : ''}" aria-label="Priority: ${PL[st.p]}">${bars(st.p)}${sug ? `<span class="sugdot${sg.overdue ? ' late' : ''}" aria-hidden="true">${I.arrowUp}</span>` : ''}</button>${priMenu}</div>`;
   // status
   const sOpen = m && m.kind === 'st' && m.key === mk;
   const shown = c !== null ? 'Done' : st.s;
@@ -892,8 +915,8 @@ document.addEventListener('click', (e) => {
     case 'toggle': toggleStep(k); break;
     case 'setStatus': closeMenu(); if (p) { const x = getItem(p, k); const before = curStage(p); if (x && x.st.s !== v) { mutate(p.id, q => setItem(q, k, { s: v, doneAt: v === 'Done' ? todayISO() : '' }), '“' + x.title + '” · ' + v); const after = curStage(S.projects[p.id]); if (after !== before) { U.open[p.id + ':' + after] = true; render(); } } else render(); } break;
     case 'setPri': closeMenu(); if (p) { const x = getItem(p, k); if (x && x.st.p !== v) mutate(p.id, q => setItem(q, k, { p: v }), '“' + x.title + '” · ' + PL[v] + ' priority'); else render(); } break;
-    case 'raise': closeMenu(); if (p) { const x = getItem(p, k); const nv = LEVELS[Math.min(LEVELS.indexOf(x.st.p) + 1, 2)]; mutate(p.id, q => setItem(q, k, { p: nv }), '“' + x.title + '” raised to ' + PL[nv]); } break;
-    case 'dismiss': closeMenu(); if (p) mutate(p.id, q => setItem(q, k, { dis: true })); break;
+    case 'raise': closeMenu(); if (p) { const x = getItem(p, k); const sgx = suggestion(x); const nv = sgx ? sgx.target : LEVELS[Math.min(LEVELS.indexOf(x.st.p) + 1, 2)]; mutate(p.id, q => setItem(q, k, { p: nv }), '“' + x.title + '” raised to ' + PL[nv]); } break;
+    case 'dismiss': closeMenu(); if (p) { const sgx = suggestion(getItem(p, k)); mutate(p.id, q => setItem(q, k, { dis: sgx ? sgx.target : 'URGENT' })); } break;
     case 'setDue': closeMenu(); if (p) { const x = getItem(p, k); mutate(p.id, q => setItem(q, k, { due: v, dis: false }), v ? 'Target date set to ' + fmtDay(v) : 'Target date cleared'); } break;
     case 'expand': if (p) { const key = p.id + ':' + k; U.expanded[key] = !U.expanded[key]; render(); if (U.expanded[key]) setTimeout(() => { const el = document.getElementById('note-' + k); if (el && !el.value) el.focus(); }, 0); } break;
     case 'moveCustom': if (p) mutate(p.id, q => { const list = q.custom; const i = list.findIndex(c => c.id === k); const st = list[i].stage; const same = list.map((c, j) => [c, j]).filter(([c]) => c.stage === st); const pos = same.findIndex(([c]) => c.id === k); const tgt = same[pos + Number(v)]; if (!tgt) return; const j = tgt[1]; [list[i], list[j]] = [list[j], list[i]]; }); break;
