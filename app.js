@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.2.2';
+const APP_VERSION = '5.2.4';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -737,10 +737,11 @@ const byDue = (a, b) => { const A = a.x.st.due ? daysFrom(a.x.st.due) : 9999, B 
 const TROW_COLS = 'trow-grid';
 function taskHead() { return `<div class="colhead ${TROW_COLS}"><span></span><span></span><span>Project · Task</span><span>Status</span><span>Stage</span><span>Designer</span><span>PO#</span><span>Due</span></div>`; }
 function taskRow(r, opts = {}) {
-  const { p, x } = r; const k = x.key; const mk = p.id + ':' + k;
-  const { due, pri, status } = stepCells(p, x);
+  const { p } = r; let x = r.x; const k = x.key; const mk = p.id + ':' + k;
   const leaving = U.tleave[mk];
-  const cls = 'step trow ' + TROW_COLS + (leaving ? ' leaving' : '') + (U.tback[mk] ? ' back' : '');
+  if (leaving === 'N/A') x = Object.assign({}, x, { st: Object.assign({}, x.st, { s: 'N/A' }) });
+  const { due, pri, status } = stepCells(p, x);
+  const cls = 'step trow ' + TROW_COLS + (leaving ? ' leaving' + (leaving === 'N/A' ? ' na-out' : '') : '') + (U.tback[mk] ? ' back' : '');
   const isProc = x.key === 'w25' || x.key === 'w26';
   const procTag = isProc ? `<button class="opslink sm press" data-act="goOps"${x.key === 'w26' ? ` data-email="${p.id}"` : ''} title=""${x.key === 'w26' ? 'Write the ops email on Operations' : 'Processing step · open Operations'}">${x.key === 'w26' ? 'OPS EMAIL ›' : 'PROCESSING ›'}</button>` : '';
   const tags = (x.kind === 'c' ? '<span class="ptag">THIS PROJECT</span>' : '') + (r.upcoming && opts.showUpcoming ? '<span class="ptag up" title="Here because of its date · joins the Tasklist when its stage becomes current">UPCOMING STAGE</span>' : '') + procTag;
@@ -759,15 +760,15 @@ function taskRow(r, opts = {}) {
   </div>`;
 }
 /* checking a step off from a list: it vanishes, with Undo */
-function listComplete(pid, k) {
+function listComplete(pid, k, status = 'Done') {
   const p = S.projects[pid]; if (!p) return; const x = getItem(p, k); if (!x) return;
   const mk = pid + ':' + k; if (U.tleave[mk]) return;
   const finish = () => {
     delete U.tleave[mk];
-    mutate(pid, q => setItem(q, k, { s: 'Done', doneAt: todayISO() }), '“' + x.title + '” marked done', { onUndo: () => { U.tback[mk] = true; setTimeout(() => { delete U.tback[mk]; }, 500); } });
+    mutate(pid, q => setItem(q, k, { s: status, doneAt: status === 'Done' ? todayISO() : '' }), '“' + x.title + '” ' + (status === 'Done' ? 'marked done' : 'marked N/A'), { onUndo: () => { U.tback[mk] = true; setTimeout(() => { delete U.tback[mk]; }, 500); } });
   };
   if (!motionOK()) return finish();
-  U.tleave[mk] = true; U.menu = null; render();
+  U.tleave[mk] = status; U.menu = null; render();
   setTimeout(finish, 620);
 }
 
@@ -1499,15 +1500,6 @@ function segPick(i) {
   if (i < cs) reopenFrom(i); else completeThrough(i - 1);
   if (!U.casc) U.segHold = null;
 }
-function previewSeg(i) {
-  const row = document.getElementById('segrow'); if (!row) return;
-  const cs = Number(row.closest('[data-cs]').dataset.cs);
-  [...row.children].forEach((b, j) => {
-    b.classList.remove('seg-on', 'seg-now', 'seg-ghost', 'pv', 'x');
-    if (i === null || i === cs) { const c = j < cs ? 'seg-on' : j === cs ? 'seg-now' : ''; if (c) b.classList.add(c); }
-    else { b.classList.add('pv', j < i ? 'seg-on' : j === i ? 'seg-now' : 'seg-ghost'); }
-  });
-}
 function archiveCurrent() {
   const p = curP(); if (!p) return;
   const before = clone(p);
@@ -1622,8 +1614,7 @@ document.addEventListener('change', (e) => {
   if (t.dataset && t.dataset.change === 'tsort') { U.tsort = t.value; lsSet('gs5:tsort', U.tsort); render(); }
   if (t.dataset && t.dataset.change === 'pickDue' && t.value) { const p = (t.dataset.pid && S.projects[t.dataset.pid]) || curP(); const k = t.dataset.k; const x = p && getItem(p, k); U.menu = null; if (x) mutate(p.id, q => setItem(q, k, { due: t.value }), 'Target date set to ' + fmtDay(t.value)); }
 });
-app.addEventListener('mouseover', (e) => { const b = e.target.closest('[data-seg]'); if (b) previewSeg(Number(b.dataset.seg)); });
-app.addEventListener('mouseout', (e) => { const b = e.target.closest('[data-seg]'); if (b && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('#segrow'))) previewSeg(null); });
+/* Stage bar hover: only the hovered segment thickens (CSS), exactly like the New project picker. No fill preview. */
 
 app.addEventListener('dragstart', (e) => {
   const crow = e.target.closest && e.target.closest('[data-cid][draggable]');
@@ -1748,7 +1739,7 @@ document.addEventListener('click', (e) => {
     case 'menu': { const m = { kind: a.dataset.kind, key: a.dataset.key }; U.menu = U.menu && U.menu.kind === m.kind && U.menu.key === m.key ? null : m; U.menuFresh = !!U.menu; render(); U.menuFresh = false; break; }
     case 'setDesigner': closeMenu(); if (p && p.designer !== v) mutate(p.id, q => { q.designer = v; }, 'Designer changed to ' + designer(v).name); else render(); break;
     case 'toggle': toggleStep(k, p); break;
-    case 'setStatus': closeMenu(); if (p && v === 'Done' && U.route.page !== 'project') { listComplete(p.id, k); break; } if (p) { const x = getItem(p, k); const before = curStage(p); if (x && x.st.s !== v) { mutate(p.id, q => setItem(q, k, { s: v, doneAt: v === 'Done' ? todayISO() : '' }), '“' + x.title + '” · ' + v); const after = curStage(S.projects[p.id]); if (after !== before) { U.open[p.id + ':' + after] = true; render(); } } else render(); } break;
+    case 'setStatus': closeMenu(); if (p && (v === 'Done' || v === 'N/A') && U.route.page !== 'project') { listComplete(p.id, k, v); break; } if (p) { const x = getItem(p, k); const before = curStage(p); if (x && x.st.s !== v) { mutate(p.id, q => setItem(q, k, { s: v, doneAt: v === 'Done' ? todayISO() : '' }), '“' + x.title + '” · ' + v); const after = curStage(S.projects[p.id]); if (after !== before) { U.open[p.id + ':' + after] = true; render(); } } else render(); } break;
     case 'setPri': closeMenu(); if (p) { const x = getItem(p, k); if (x && x.st.p !== v) mutate(p.id, q => setItem(q, k, { p: v }), '“' + x.title + '” · ' + PL[v] + ' priority'); else render(); } break;
     case 'raise': closeMenu(); if (p) { const x = getItem(p, k); const sgx = suggestion(x); const nv = sgx ? sgx.target : LEVELS[Math.min(LEVELS.indexOf(x.st.p) + 1, 2)]; mutate(p.id, q => setItem(q, k, { p: nv }), '“' + x.title + '” raised to ' + PL[nv]); } break;
     case 'dismiss': closeMenu(); if (p) { const sgx = suggestion(getItem(p, k)); mutate(p.id, q => setItem(q, k, { dis: sgx ? sgx.target : 'URGENT' })); } break;

@@ -139,8 +139,8 @@ h2{margin:0;font-size:15px;font-weight:600}
 .obwrap>.step.isopen .pbtn{--lv:var(--low);background:color-mix(in srgb,var(--lv) 12%,var(--panel));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--lv) 45%,transparent)}
 .obwrap>.step.isopen .pbtn.tile-MEDIUM{--lv:var(--medium)}.obwrap>.step.isopen .pbtn.tile-URGENT{--lv:var(--urgent)}
 .obwrap>.step.isopen .pbtn:hover{background:color-mix(in srgb,var(--lv) 20%,var(--panel))}
-.obwrap>.step.isopen .bars i{background:color-mix(in srgb,var(--lv) 28%,var(--panel))}
-.obwrap>.step.isopen .bars i.on{background:var(--lv)}
+.obwrap>.step.isopen .pbtn .bars i{background:color-mix(in srgb,var(--lv) 28%,var(--panel))}
+.obwrap>.step.isopen .pbtn .bars i.on{background:var(--lv)}
 .tile-LOW{background:var(--lowBg)}.tile-MEDIUM{background:var(--mediumBg)}.tile-URGENT{background:var(--urgentBg)}
 .sugdot{position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:99px;background:var(--medium);color:var(--bg);display:grid;place-items:center;animation:nudge 1.6s ease-in-out infinite;box-shadow:0 0 0 2px var(--panel)}
 @keyframes nudge{0%,100%{transform:translateY(1px)}50%{transform:translateY(-1px)}}
@@ -238,13 +238,11 @@ h2{margin:0;font-size:15px;font-weight:600}
 .stagecard{padding:16px 18px;margin-bottom:22px}
 .segrow{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
 .segbtn{border:0;background:transparent;padding:6px 0;cursor:pointer;display:flex;flex-direction:column;gap:7px;text-align:left;min-width:0}
-.segtrack{display:block;height:6px;border-radius:3px;background:var(--track);position:relative;overflow:hidden;transition:height .15s}
-.segbtn:hover .segtrack{height:9px}
-.segtrack i{position:absolute;inset:0;background:var(--accent);transform-origin:left;transform:scaleX(0);transition:transform .12s ease-out,opacity .12s ease-out}
-.segbtn.pv .segtrack i{transition-duration:.18s,.18s;transition-delay:0ms,0ms}
+.segtrack{display:block;height:6px;margin:1.5px 0;border-radius:3px;background:var(--track);position:relative;overflow:hidden}
+.segbtn:hover .segtrack,.seg-now .segtrack{height:9px;margin:0}
+.segtrack i{position:absolute;inset:0;background:var(--accent);transform-origin:left;transform:scaleX(0)}
 .seg-on .segtrack i{transform:scaleX(1)}
 .seg-now .segtrack i{transform:scaleX(1);opacity:.45}
-.seg-ghost .segtrack i{transform:scaleX(0)}
 .segname{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .seg-now .segname{color:var(--ink);font-weight:500}
 .donebar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-radius:12px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow)}
@@ -386,6 +384,12 @@ h2{margin:0;font-size:15px;font-weight:600}
 .trow.leaving .check{background:var(--accent);border-color:var(--accent);animation:checkpop .3s cubic-bezier(.2,.7,.2,1) both}
 .trow.leaving .check .tick{opacity:1;transform:none}
 .trow.leaving .stitle{text-decoration:line-through;color:var(--muted)}
+.trow.leaving.na-out{animation-name:vanishna}
+@keyframes vanishna{0%{opacity:1;transform:none;max-height:56px}45%{opacity:1;transform:none;background:var(--waitingBg)}75%{opacity:0;transform:translateX(24px);max-height:56px}100%{opacity:0;transform:translateX(24px);max-height:0;padding-top:0;padding-bottom:0;border-top-width:0}}
+.trow.leaving.na-out .check{background:transparent;border-color:var(--waiting);border-style:dashed;animation:napop .3s cubic-bezier(.2,.7,.2,1) both}
+@keyframes napop{0%{border-color:var(--line);transform:scale(1)}50%{transform:scale(1.18)}100%{border-color:var(--waiting);transform:scale(1)}}
+.trow.leaving.na-out .check .tick{opacity:0}
+.trow.leaving.na-out .stitle{text-decoration:none;color:var(--muted)}
 .trow.back{animation:rise .4s cubic-bezier(.2,.7,.2,1) backwards}
 .tgroup{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);margin-bottom:10px}
 .tgroup .tbody{padding:0 8px 8px}
