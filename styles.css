@@ -183,6 +183,11 @@ h2{margin:0;font-size:15px;font-weight:600}
 .lv-LOW i.on{background:var(--muted)}
 .lv-MEDIUM i.on{background:var(--medium)}
 .lv-URGENT i.on{background:var(--urgent)}
+.obwrap>.step.isopen .chipbtn{--sc:var(--muted);background:color-mix(in srgb,var(--sc) 10%,var(--panel));color:color-mix(in srgb,var(--sc) 85%,var(--ink));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc) 45%,transparent)}
+.obwrap>.step.isopen .chipbtn.chip-ip{--sc:var(--prog);background:color-mix(in srgb,var(--sc) 16%,var(--panel))}
+.obwrap>.step.isopen .chipbtn.chip-dl{--sc:var(--delay);background:color-mix(in srgb,var(--sc) 14%,var(--panel))}
+.obwrap>.step.isopen .chipbtn.chip-as{--sc:var(--assign);background:color-mix(in srgb,var(--sc) 14%,var(--panel))}
+.obwrap>.step.isopen .chipbtn:hover{filter:none;background:color-mix(in srgb,var(--sc) 22%,var(--panel))}
 .obwrap>.step.isopen .pbtn{--lv:var(--low);background:color-mix(in srgb,var(--lv) 12%,var(--panel));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--lv) 45%,transparent)}
 .obwrap>.step.isopen .pbtn.tile-MEDIUM{--lv:var(--medium)}.obwrap>.step.isopen .pbtn.tile-URGENT{--lv:var(--urgent)}
 .obwrap>.step.isopen .pbtn:hover{background:color-mix(in srgb,var(--lv) 20%,var(--panel))}
