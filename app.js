@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.3.5';
+const APP_VERSION = '5.4.0';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -32,7 +32,8 @@ const DEFAULT_SETTINGS = {
   designers: [{ id: 'isaiah', name: 'Isaiah Bates', color: 'sage' }, { id: 'dan', name: 'Dan Van Weelden', color: 'pine' }, { id: 'justin', name: 'Justin Wigdahl', color: 'wheat' }],
   crews: ['Ken Small', 'Brad Oxley', 'Chuck Johnson', 'Jon Goodknight', 'Curtis Carlson', 'Michael Schreck', 'Kaleb Ross', 'Marcelo Montero', 'Evan Erichsen', 'Vaughn Gibson', 'Martin Huber', 'Peter Boman', 'Rob Lechnir', 'Rick Johnson', 'Nick Breuning'],
   retention: 14,
-  opsEmailDefaults: {}
+  opsEmailDefaults: {},
+  tags: ['pool', 'meadow', 'planting', 'screening', 'patio', 'pergola', 'retaining-wall', 'firepit', 'walkway', 'steps', 'irrigation', 'lighting', 'water-feature', 'sod', 'drainage', 'grading', 'natives', 'trees', 'outdoor-kitchen', 'deck']
 };
 
 const FIREBASE_CONFIG = {
@@ -142,7 +143,7 @@ const U = {
   busy: false,
   tleave: {}, tback: {}, tgroups: {}, dgroups: {}, dsel: lsGet('gs5:dsel', 'all'), tsort: lsGet('gs5:tsort', 'due'), tsearch: '', dueDay: null,
   dash: lsGet('gs5:dash', {}), wopen: {}, wdrag: null,
-  oleave: {}, oback: {}, aleave: {}, stats: lsGet('gs5:stats', false), statsFresh: false, statsClosing: false, statRange: lsGet('gs5:statRange', 'month'), odrop: null, odrag: null, email: null, asort: lsGet('gs5:asort', 'recent')
+  oleave: {}, oback: {}, aleave: {}, stats: lsGet('gs5:stats', false), pstats: lsGet('gs5:pstats', false), pstatsFresh: false, pstatsClosing: false, tagQ: '', tagHi: 0, tagSel: null, asearch: '', statsFresh: false, statsClosing: false, statRange: lsGet('gs5:statRange', 'month'), odrop: null, odrag: null, email: null, asort: lsGet('gs5:asort', 'recent')
 };
 const LOCAL_ONLY = location.protocol === 'file:' || /[?&]local\b/.test(location.search);
 
@@ -536,14 +537,14 @@ function pageSoon(title, round, text) {
 function pageProjects() {
   const q = U.search.trim().toLowerCase();
   const all = activeProjects();
-  const list = all.filter(p => !q || (p.name + ' ' + p.address + ' ' + p.po).toLowerCase().includes(q));
+  const list = all.filter(p => projMatch(p, q));
   const sorts = [['stage', 'Furthest stage'], ['recent', 'Recently edited'], ['urgent', 'Most urgent'], ['open', 'Most open steps'], ['az', 'Client A–Z']];
   const head = `<div class="phead"><div><div class="eyebrow">${all.length} active ${all.length === 1 ? 'project' : 'projects'}</div><h1>Projects</h1></div>
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
-      <label><span class="sr">Search projects</span><input id="f-search" class="search" placeholder="Search client, address or PO" value="${esc(U.search)}" data-input="search" autocomplete="off"></label>
-      ${sortPicker('sort', U.sort, sorts)}
+      <label><span class="sr">Search projects</span><input id="f-search" class="search" placeholder="Search client, address, PO or #tag" value="${esc(U.search)}" data-input="search" autocomplete="off"></label>
+      ${sortPicker('sort', U.sort, sorts)}<button class="sel selbtn press statbtn${U.pstats ? ' on' : ''}" data-act="pstats" aria-expanded="${!!U.pstats}" title="Projects by tag">${svg(14, '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"></path>', 2)}Stats</button>
       <button class="btn pri press" data-act="newProject">${I.plus}New project</button>
-    </div></div>`;
+    </div></div>${U.pstats || U.pstatsClosing ? pstatsHtml() : ''}`;
   if (!all.length) {
     return head + `<div class="empty rise"><h2>No projects yet</h2><p>Start your first project and it’ll be filed here by designer, like drawers in a cabinet.</p><button class="btn pri press" data-act="newProject">${I.plus}New project</button></div>`;
   }
@@ -619,6 +620,7 @@ function pageProject() {
         <label style="display:flex"><span class="sr">Address</span><input id="h-addr" class="hedit" value="${esc(p.address)}" placeholder="Add address" data-commit="address" data-id="${p.id}" style="width:${Math.max(14, (p.address || '').length + 2)}ch" autocomplete="off"></label>
         <label style="display:flex;align-items:center;gap:2px"><span class="mono" style="font-size:12px">PO</span><input id="h-po" class="hedit mono" value="${esc(p.po)}" placeholder="Add PO#" data-commit="po" data-id="${p.id}" style="width:${Math.max(9, (p.po || '').length + 2)}ch;font-size:13px" autocomplete="off" aria-label="PO number"></label>
       </div>
+      ${tagLine(p)}
     </div>
     <div style="display:flex;align-items:center;gap:8px;padding-top:20px">
       ${p.archived ? '' : `<button class="btn press" data-act="archiveProject" title="Archive project">${I.box(14)}Archive</button>`}
@@ -735,6 +737,79 @@ function rowHtml(p, x, cur) {
 /* ============================================================
    SHARED — task rows (Tasklist, Due Soon, Dashboard)
    ============================================================ */
+/* ============================================================
+   TAGS — #hashtags on projects. One word each; spaces become dashes ("retaining wall" → retaining-wall).
+   The library lives in settings.tags; projects keep their own list in p.tags.
+   ============================================================ */
+function tagSlug(v) { return String(v || '').toLowerCase().replace(/^#+/, '').trim().replace(/[\s_]+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, ''); }
+function tagLib() { return S.settings.tags || []; }
+function tagCount(t) { return Object.values(S.projects).filter(p => (p.tags || []).includes(t)).length; }
+/* search: "#pat" matches tags starting with "pat"; plain words also match tags */
+function tagHit(p, q) {
+  const tags = p.tags || [];
+  if (q.startsWith('#')) { const s2 = tagSlug(q); return !s2 || tags.some(t => t.startsWith(s2)); }
+  const s2 = tagSlug(q); return !!s2 && tags.some(t => t.includes(s2));
+}
+function projMatch(p, q, extra = '') {
+  if (!q) return true;
+  if (q.startsWith('#')) return tagHit(p, q);
+  return (p.name + ' ' + (p.address || '') + ' ' + (p.po || '') + ' ' + extra).toLowerCase().includes(q) || tagHit(p, q);
+}
+function tagOptions(p) {
+  const q = tagSlug(U.tagQ || ''); const lib = tagLib(); const have = p.tags || [];
+  const opts = lib.filter(t => !have.includes(t) && (!q || t.includes(q)))
+    .sort((a, b) => (q ? (b.startsWith(q) ? 1 : 0) - (a.startsWith(q) ? 1 : 0) : 0) || tagCount(b) - tagCount(a) || a.localeCompare(b))
+    .slice(0, 8).map(t => ({ t, n: tagCount(t) }));
+  if (q && !lib.includes(q)) opts.push({ t: q, create: true });
+  return opts;
+}
+function tagLine(p) {
+  const open = U.menu && U.menu.kind === 'tag' && U.menu.key === p.id;
+  let menu = '';
+  if (open) {
+    const opts = tagOptions(p); const hi = Math.min(U.tagHi || 0, Math.max(0, opts.length - 1));
+    const q = tagSlug(U.tagQ || '');
+    menu = `<div class="smenu tagmenu${U.menuFresh ? ' pop-in' : ''}" role="menu">
+      <input id="tag-in" class="tagin" placeholder="Find or create a tag" value="${esc(U.tagQ || '')}" data-input="tagq" data-tagin="${p.id}" autocomplete="off" spellcheck="false" aria-label="Find or create a tag">
+      ${opts.map((o, i) => `<button class="mi${i === hi ? ' hi' : ''}" data-act="tagAdd" data-v="${esc(o.t)}" role="menuitem">${o.create ? `<span>Create <b>#${esc(o.t)}</b></span>` : `<span><span class="hash">#</span>${esc(o.t)}</span><span class="hint mono">${o.n}</span>`}</button>`).join('')}
+      ${!opts.length ? `<div class="tagnone">${q && (p.tags || []).includes(q) ? 'Already tagged #' + esc(q) : 'Type to find or create a tag'}</div>` : ''}
+    </div>`;
+  }
+  return `<div class="ptags">${(p.tags || []).map(t => `<span class="ptag"><button class="ptagb" data-act="tagGo" data-v="${esc(t)}" title="Show every #${esc(t)} project"><span class="hash">#</span>${esc(t)}</button><button class="ptagx" data-act="tagDel" data-v="${esc(t)}" aria-label="Remove #${esc(t)}" title="Remove">×</button></span>`).join('')}<span style="position:relative"><button class="ptagadd press" data-act="menu" data-kind="tag" data-key="${p.id}" aria-haspopup="menu" aria-expanded="${open}">+ Tag</button>${menu}</span></div>`;
+}
+function tagAdd(pid, t) {
+  const p = S.projects[pid]; t = tagSlug(t); if (!p || !t) return;
+  U.tagQ = ''; U.tagHi = 0; U.menu = null;
+  if ((p.tags || []).includes(t)) { render(); return; }
+  if (!tagLib().includes(t)) { const s2 = clone(S.settings); s2.tags = (s2.tags || []).concat([t]); putMeta('settings', s2); }
+  mutate(pid, q => { q.tags = (q.tags || []).concat([t]); }, '#' + t + ' added to ' + shortName(p.name));
+}
+function tagDel(pid, t) {
+  const p = S.projects[pid]; if (!p) return;
+  mutate(pid, q => { q.tags = (q.tags || []).filter(x => x !== t); }, '#' + t + ' removed from ' + shortName(p.name));
+}
+/* rename or merge a tag everywhere (library, projects, stats history), with Undo */
+function tagRename(old, v) {
+  v = tagSlug(v); if (!v || v === old) return false;
+  const beforeS = clone(S.settings), beforeA = clone(S.activity);
+  const touched = Object.values(S.projects).filter(p => (p.tags || []).includes(old)).map(p => clone(p));
+  const merge = tagLib().includes(v);
+  const s2 = clone(S.settings); s2.tags = merge ? s2.tags.filter(t => t !== old) : s2.tags.map(t => t === old ? v : t); putMeta('settings', s2);
+  touched.forEach(p => { const q = clone(p); q.tags = [...new Set(q.tags.map(t => t === old ? v : t))]; putProject(q, { keepTime: true }); });
+  const a2 = clone(S.activity); let ach = false;
+  Object.values(a2.days || {}).forEach(d => { if (d.g && d.g[old]) { const o = d.g[old]; const n = d.g[v] || (d.g[v] = { t: 0, new: 0, sold: 0, inst: 0 }); ['t', 'new', 'sold', 'inst'].forEach(k => { n[k] += o[k] || 0; }); delete d.g[old]; ach = true; } });
+  if (ach) putMeta('activity', a2);
+  pushUndo((merge ? '#' + old + ' merged into #' + v : 'Renamed to #' + v) + (touched.length ? ' · ' + touched.length + (touched.length === 1 ? ' project' : ' projects') + ' updated' : ''), () => { putMeta('settings', beforeS); if (ach) putMeta('activity', beforeA); touched.forEach(p => putProject(p, { keepTime: true })); });
+  return true;
+}
+function tagRemove(t) {
+  const beforeS = clone(S.settings);
+  const touched = Object.values(S.projects).filter(p => (p.tags || []).includes(t)).map(p => clone(p));
+  const s2 = clone(S.settings); s2.tags = s2.tags.filter(x => x !== t); putMeta('settings', s2);
+  touched.forEach(p => { const q = clone(p); q.tags = q.tags.filter(x => x !== t); putProject(q, { keepTime: true }); });
+  pushUndo('#' + t + ' removed' + (touched.length ? ' from ' + touched.length + (touched.length === 1 ? ' project' : ' projects') : ''), () => { putMeta('settings', beforeS); touched.forEach(p => putProject(p, { keepTime: true })); });
+}
+
 /* App-style dropdown used everywhere instead of the browser's native dropdown.
    It carries a hidden input with the same data-* attributes the old dropdown had, and fires a
    'change' event on it, so the existing change handlers keep working. It opens and closes by
@@ -831,14 +906,14 @@ function listComplete(pid, k, status = 'Done') {
    ============================================================ */
 function pageTasklist() {
   const q = (U.tsearch || '').trim().toLowerCase();
-  const rows = openSteps(r => !r.upcoming && dselOK(r.p) && (!q || (r.p.name + ' ' + r.x.title + ' ' + STAGES[r.x.stage] + ' ' + (r.p.po || '')).toLowerCase().includes(q)))
+  const rows = openSteps(r => !r.upcoming && dselOK(r.p) && (!q || (q.startsWith('#') ? tagHit(r.p, q) : (r.p.name + ' ' + r.x.title + ' ' + STAGES[r.x.stage] + ' ' + (r.p.po || '')).toLowerCase().includes(q) || tagHit(r.p, q))))
     .concat(Object.keys(U.tleave).map(mk => { const [pid, k] = mk.split(':'); const p = S.projects[pid]; const x = p && getItem(p, k); return p && x && isClosed(x.st.s) ? { p, x, cs: curStage(p), upcoming: false } : null; }).filter(Boolean));
   const sorts = { due: byDue, project: (a, b) => a.p.name.localeCompare(b.p.name) || byDue(a, b), stage: (a, b) => (a.x.stage - b.x.stage) || byDue(a, b), recent: (a, b) => (b.p.updatedAt || 0) - (a.p.updatedAt || 0) || byDue(a, b) };
   const sorter = sorts[U.tsort] || byDue;
   const total = rows.filter(r => !U.tleave[r.p.id + ':' + r.x.key]).length;
   const head = `<div class="phead"><div><div class="eyebrow">${total} open · current stages only</div><h1>Tasklist</h1></div>
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
-      <label><span class="sr">Search tasks</span><input id="t-search" class="search" placeholder="Search tasks or projects" value="${esc(U.tsearch || '')}" data-input="tsearch" autocomplete="off"></label>
+      <label><span class="sr">Search tasks</span><input id="t-search" class="search" placeholder="Search tasks, projects or #tag" value="${esc(U.tsearch || '')}" data-input="tsearch" autocomplete="off"></label>
       ${sortPicker('tsort', U.tsort || 'due', [['due', 'Due date'], ['project', 'Project A–Z'], ['stage', 'Stage'], ['recent', 'Recently edited']])}
       <button class="sel selbtn press statbtn${U.stats ? ' on' : ''}" data-act="stats" aria-expanded="${!!U.stats}" title="Recent activity">${svg(14, '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"></path>', 2)}Stats</button>
     </div></div>
@@ -1347,11 +1422,13 @@ let purgedOnce = false;
    STATS — fold-open panel on the Tasklist
    ============================================================ */
 const STAT_RANGES = [['week', 'Week', 'Last 7 days, by day'], ['month', 'Month', 'Last 30 days, by day'], ['half', '6 months', 'Last 6 months, by week'], ['year', 'Year', 'Last 12 months, by month']];
-function statBuckets(range) {
+function statBuckets(range, tag) {
   const days = activityDays(); const t0 = today0(); const out = [];
   const day = (n) => { const d = new Date(t0); d.setDate(d.getDate() - n); return d; };
   const blank = () => ({ t: {}, new: 0, sold: 0, inst: 0 });
-  const addDay = (b, iso) => { const x = days[iso]; if (!x) return; Object.entries(x.t || {}).forEach(([k, v]) => { b.t[k] = (b.t[k] || 0) + v; }); b.new += x.new || 0; b.sold += x.sold || 0; b.inst += x.inst || 0; };
+  const addDay = (b, iso) => { let x = days[iso]; if (!x) return;
+    if (tag) { const g = (x.g || {})[tag]; if (!g) return; b.t[tag] = (b.t[tag] || 0) + (g.t || 0); b.new += g.new || 0; b.sold += g.sold || 0; b.inst += g.inst || 0; return; }
+    Object.entries(x.t || {}).forEach(([k, v]) => { b.t[k] = (b.t[k] || 0) + v; }); b.new += x.new || 0; b.sold += x.sold || 0; b.inst += x.inst || 0; };
   if (range === 'week' || range === 'month') {
     const n = range === 'week' ? 7 : 30;
     for (let i = n - 1; i >= 0; i--) { const d = day(i); const b = blank(); addDay(b, isoOf(d)); b.tip = WK[d.getDay()] + ', ' + MO[d.getMonth()] + ' ' + d.getDate(); b.lbl = range === 'week' ? WK[d.getDay()] : ((n - 1 - i) % 5 === 0 ? MO[d.getMonth()] + ' ' + d.getDate() : ''); out.push(b); }
@@ -1410,6 +1487,55 @@ function statsHtml() {
 }
 /* fold panels clip their content only while folding, so sticky columns and menus work once open */
 function settleFolds() { setTimeout(() => document.querySelectorAll('.fold.opening').forEach(f => f.classList.remove('opening')), 380); }
+function toggleFold(key) {
+  if (U[key]) {
+    if (!motionOK()) { U[key] = false; lsSet('gs5:' + key, false); return render(); }
+    U[key] = false; U[key + 'Closing'] = true; render();
+    setTimeout(() => { U[key + 'Closing'] = false; render(); }, 300);
+  } else { U[key] = true; U[key + 'Fresh'] = true; render(); U[key + 'Fresh'] = false; }
+  lsSet('gs5:' + key, U[key]);
+}
+/* Projects page: which kinds of work (tags) keep you busy, and when */
+function rangeStart(range) { const t0 = today0(); const d = new Date(t0); if (range === 'week') d.setDate(d.getDate() - 6); else if (range === 'month') d.setDate(d.getDate() - 29); else if (range === 'half') d.setDate(d.getDate() - 181); else return isoOf(new Date(t0.getFullYear(), t0.getMonth() - 11, 1)); return isoOf(d); }
+function tagTotals(range) {
+  const days = activityDays(); const from = rangeStart(range); const lib = tagLib(); const tot = {};
+  Object.entries(days).forEach(([d, x]) => { if (d < from || !x.g) return; Object.entries(x.g).forEach(([tg, g]) => { if (!lib.includes(tg)) return; const o = tot[tg] || (tot[tg] = { t: 0, new: 0, sold: 0, inst: 0 }); ['t', 'new', 'sold', 'inst'].forEach(k => { o[k] += g[k] || 0; }); }); });
+  return Object.entries(tot).map(([tg, o]) => Object.assign({ tag: tg }, o)).filter(o => o.t + o.new + o.sold + o.inst > 0)
+    .sort((a, b) => b.t - a.t || (b.sold + b.inst) - (a.sold + a.inst) || a.tag.localeCompare(b.tag));
+}
+function pstatsHtml() {
+  const range = U.statRange || 'month';
+  const sub = STAT_RANGES.find(r => r[0] === range)[2];
+  const rows = tagTotals(range);
+  const sel = rows.find(r => r.tag === U.tagSel) ? U.tagSel : (rows[0] && rows[0].tag);
+  const maxT = Math.max(1, ...rows.map(r => r.t));
+  const list = rows.slice(0, 12).map(r => `<button class="tgrow press${r.tag === sel ? ' on' : ''}" data-act="tagSel" data-v="${esc(r.tag)}" aria-pressed="${r.tag === sel}">
+      <span class="tgname"><span class="hash">#</span>${esc(r.tag)}</span>
+      <span class="tgbar"><i style="width:${Math.max(2, Math.round(100 * r.t / maxT))}%"></i></span>
+      <span class="tgnums mono">${r.t} task${r.t === 1 ? '' : 's'}${r.sold ? ' · ' + r.sold + ' sold' : ''}${r.inst ? ' · ' + r.inst + ' installed' : ''}</span></button>`).join('');
+  let chart = '';
+  if (sel) {
+    const B = statBuckets(range, sel);
+    const W = 900, H = 150, L = 34, base = H - 22, top = 10;
+    const max = Math.max(1, ...B.map(b => b.tasks));
+    const bw = (W - L) / B.length, gap = Math.min(8, bw * 0.28);
+    let svgc = `<line x1="${L}" x2="${W}" y1="${base}" y2="${base}" stroke="var(--line)"></line><text x="${L - 8}" y="${top + 4}" text-anchor="end" class="stx">${max}</text>`;
+    B.forEach((b, i) => { const x = L + i * bw + gap / 2; const h = (base - top) * b.tasks / max;
+      if (b.tasks) svgc += `<rect x="${x.toFixed(1)}" y="${(base - h).toFixed(1)}" width="${(bw - gap).toFixed(1)}" height="${h.toFixed(1)}" rx="${Math.min(2.5, bw / 6).toFixed(1)}" fill="var(--accent)"><title>${esc(b.tip)} · ${b.tasks} task${b.tasks === 1 ? '' : 's'} on #${esc(sel)} jobs</title></rect>`;
+      [['sold', 'var(--medium)'], ['inst', 'var(--prog)']].forEach(([k, c], j) => { if (b[k]) svgc += `<circle cx="${(x + (bw - gap) / 2 + (j ? 4 : -4)).toFixed(1)}" cy="${(base - h - 8).toFixed(1)}" r="3.4" fill="${c}"><title>${esc(b.tip)} · ${b[k]} ${k === 'sold' ? 'sold' : 'installed'}</title></circle>`; });
+      if (b.lbl) svgc += `<text x="${x.toFixed(1)}" y="${H - 5}" class="stx">${b.lbl}</text>`; });
+    chart = `<div class="stcap">#${esc(sel)} through ${range === 'year' ? 'the year' : 'this period'} <span class="slg"><i style="background:var(--accent)"></i>Tasks completed</span><span class="slg"><i style="background:var(--medium);border-radius:9px"></i>Sold</span><span class="slg"><i style="background:var(--prog);border-radius:9px"></i>Installed</span></div>
+      <svg class="stchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Activity on #${esc(sel)} projects, ${esc(sub.toLowerCase())}">${svgc}</svg>`;
+  }
+  const fold = U.pstatsClosing ? ' closing' : U.pstatsFresh ? ' opening' : '';
+  return `<div class="fold${fold}" id="pstatsfold"><div class="foldin"><section class="card statcard" aria-label="Projects by tag">
+    <div class="sthead"><h2>Projects by tag</h2><span class="stsub">${sub}</span><span style="flex:1"></span>
+      <div class="segctl" role="group" aria-label="Time range">${STAT_RANGES.map(([v, l]) => `<button class="press${v === range ? ' on' : ''}" data-act="statRange" data-v="${v}" aria-pressed="${v === range}">${l}</button>`).join('')}</div>
+      <button class="ibtn press" data-act="pstats" aria-label="Close stats" title="Close" style="width:30px;height:30px">${I.x(15)}</button></div>
+    ${rows.length ? `<div class="stcap">Tasks completed on tagged jobs · click a tag to see when</div><div class="tglist">${list}</div>${chart}` : `<div class="stempty" style="margin-top:14px">${tagLib().length && Object.values(S.projects).some(p => (p.tags || []).length) ? 'No activity on tagged projects in this period.' : 'Tag projects (+ Tag on a project page) to see which kinds of work keep you busiest, and when.'}</div>`}
+    <div class="stempty">A job with several tags counts toward each one.</div>
+  </section></div></div>`;
+}
 function toggleStats() {
   if (U.stats) {
     if (!motionOK()) { U.stats = false; return render(); }
@@ -1440,11 +1566,13 @@ function projEvents(p) {
   if (inst.length && inst.every(st => st && isClosed(st.s)) && !inst.some(st => st.s === 'Done' && isSeed(p, st))) {
     const last = inst.map(st => st.doneAt || '').sort().pop(); if (last) ev.push({ d: last, t: 'inst' });
   }
+  if ((p.tags || []).length) ev.forEach(e => { e.tags = p.tags; });
   return ev;
 }
 function addEvent(days, ev) {
   const x = days[ev.d] || (days[ev.d] = { t: {}, new: 0, sold: 0, inst: 0 });
   if (ev.t === 'task') { const k = ev.who || '_'; x.t[k] = (x.t[k] || 0) + 1; } else x[ev.t] = (x[ev.t] || 0) + 1;
+  (ev.tags || []).forEach(tg => { const g = (x.g || (x.g = {}))[tg] || (x.g[tg] = { t: 0, new: 0, sold: 0, inst: 0 }); g[ev.t === 'task' ? 't' : ev.t] += 1; });
 }
 /* every day with activity: the tally of deleted projects plus every project still in the app */
 function activityDays() {
@@ -1475,16 +1603,17 @@ function purgeArchive() {
 }
 function pageArchived() {
   const all = Object.values(S.projects).filter(p => p.archived);
-  const list = all.filter(dselOK);
+  const aq = (U.asearch || '').trim().toLowerCase();
+  const list = all.filter(dselOK).filter(p => projMatch(p, aq));
   const r = retentionDays();
   const sorts = { recent: (a, b) => (b.archivedAt || 0) - (a.archivedAt || 0), added: (a, b) => (a.archivedAt || 0) - (b.archivedAt || 0), az: (a, b) => a.name.localeCompare(b.name) };
   const rows = list.slice().sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (sorts[U.asort] || sorts.recent)(a, b));
   const note = r ? `Kept for ${r} days after archiving, then deleted automatically. Pinned projects are kept until you unpin them.` : 'Archived projects are kept until you delete them (auto-delete is off in Settings).';
   const head = `<div class="phead"><div><div class="eyebrow">${all.length} archived</div><h1>Archived</h1></div>
-    ${sortPicker('asort', U.asort || 'recent', [['recent', 'Recently archived'], ['added', 'Date added'], ['az', 'Client A–Z']])}</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label><span class="sr">Search archived projects</span><input id="a-search" class="search" placeholder="Search client, address, PO or #tag" value="${esc(U.asearch || '')}" data-input="asearch" autocomplete="off"></label>${sortPicker('asort', U.asort || 'recent', [['recent', 'Recently archived'], ['added', 'Date added'], ['az', 'Client A–Z']])}</div></div>
     <div style="margin:-8px 0 16px">${designerPills()}</div>`;
   if (!all.length) return head + `<div class="empty rise"><h2>Nothing archived</h2><p>${esc(note)}</p></div>`;
-  return head + `<section class="drawer kraft rise"><div style="padding:12px 16px 0;font-size:12.5px;color:var(--muted)">${esc(note)}</div><div class="fgrid">${rows.map(archFolder).join('') || '<div class="gempty">No archived projects for this designer.</div>'}</div></section>`;
+  return head + `<section class="drawer kraft rise"><div style="padding:12px 16px 0;font-size:12.5px;color:var(--muted)">${esc(note)}</div><div class="fgrid">${rows.map(archFolder).join('') || (aq ? `<div class="gempty">No archived projects match “${esc(U.asearch)}”.</div>` : '<div class="gempty">No archived projects for this designer.</div>')}</div></section>`;
 }
 function archFolder(p) {
   const left = daysLeft(p);
@@ -1544,6 +1673,8 @@ function pageSettings() {
     <label style="display:flex;align-items:center;gap:10px;padding-top:10px;border-top:1px solid var(--line);color:var(--muted)"><span style="width:22px;display:grid;place-items:center">${I.plus}</span><span class="sr">Add a designer</span><input class="addin" id="add-designer" placeholder="Add designer — press Enter" data-sadd="designer" autocomplete="off"></label></section>
   <section class="card scard rise" style="animation-delay:80ms"><h2>Crew leaders</h2><p class="sub">Used by the Crew leader dropdown on Operations. ${(S.settings.crews || []).length} crew leaders · sorted A–Z there. Renaming updates every install.</p><div class="crgrid">${crows}</div>
     <label style="display:flex;align-items:center;gap:10px;padding-top:10px;border-top:1px solid var(--line);color:var(--muted)"><span style="width:22px;display:grid;place-items:center">${I.plus}</span><span class="sr">Add a crew leader</span><input class="addin" id="add-crew" placeholder="Add crew leader — press Enter" data-sadd="crew" autocomplete="off"></label></section>
+  <section class="card scard rise" style="animation-delay:100ms"><h2>Tags</h2><p class="sub">Tag projects from their page with + Tag. ${tagLib().length} tags · one word each, spaces become dashes. Renaming updates every project; renaming to an existing tag merges the two.</p><div class="crgrid">${tagLib().map((t, i) => { const n = tagCount(t); return `<div class="crow2"><label style="min-width:0;display:flex;align-items:center"><span style="color:var(--muted);margin-right:1px">#</span><span class="sr">Tag</span><input class="tin" id="tg-${i}" value="${esc(t)}" data-scommit="tag" data-i="${i}" autocomplete="off" spellcheck="false"></label><span class="mono" style="font-size:11.5px;color:var(--muted);text-align:right">${n ? n + (n === 1 ? ' project' : ' projects') : '—'}</span><button class="ibtn press" data-act="tagRemove" data-v="${esc(t)}" aria-label="Remove #${esc(t)}" title="${n ? 'Remove from the list and from ' + n + (n === 1 ? ' project' : ' projects') : 'Remove'}">${I.x(13)}</button></div>`; }).join('')}</div>
+    <label style="display:flex;align-items:center;gap:10px;padding-top:10px;border-top:1px solid var(--line);color:var(--muted)"><span style="width:22px;display:grid;place-items:center">${I.plus}</span><span class="sr">Add a tag</span><input class="addin" id="add-tag" placeholder="Add tag — press Enter" data-sadd="tag" autocomplete="off" spellcheck="false"></label></section>
   <section class="card scard rise" style="animation-delay:120ms"><h2>Workflow &amp; archive</h2><p class="sub">The step template every project uses, and how long archived projects are kept.</p>
     <div class="rowline"><span><span style="display:block;font-size:13.5px;font-weight:500">Workflow template</span><span style="font-size:12.5px;color:var(--muted)">${S.workflow.length} steps across 7 stages.</span></span><button class="btn press" data-act="navx" data-v="#/workflow">${I.flow}Edit workflow ›</button></div>
     <div class="rowline"><span><span style="display:block;font-size:13.5px;font-weight:500">Auto-delete archived projects</span><span style="font-size:12.5px;color:var(--muted)">Keeps the archive tidy. Pinned projects are always kept.</span></span>${dpick(ret, [[7, 'After 7 days'], [14, 'After 14 days'], [30, 'After 30 days'], [0, 'Never']], 'data-change="retention"', { label: 'Auto-delete archived projects' })}</div></section>
@@ -1735,7 +1866,19 @@ document.addEventListener('keydown', (e) => {
   }
   if (U.email && e.key === 'Escape') { e.preventDefault(); document.querySelector('[data-act="emClose"]').click(); return; }
   if (e.key === 'Escape' && U.menu) { U.menu = null; render(); return; }
-  if (t.dataset && t.dataset.scommit && (e.key === 'Enter' || e.key === 'Escape')) { if (e.key === 'Escape') { t.value = t.dataset.scommit === 'crew' ? S.settings.crews[Number(t.dataset.i)] : designer(t.dataset.id).name; } e.preventDefault(); t.blur(); return; }
+  if (t.dataset && t.dataset.scommit && (e.key === 'Enter' || e.key === 'Escape')) { if (e.key === 'Escape') { t.value = t.dataset.scommit === 'tag' ? tagLib()[Number(t.dataset.i)] : t.dataset.scommit === 'crew' ? S.settings.crews[Number(t.dataset.i)] : designer(t.dataset.id).name; } e.preventDefault(); t.blur(); return; }
+  if (t.dataset && t.dataset.tagin) {
+    const p = S.projects[t.dataset.tagin]; const opts = p ? tagOptions(p) : [];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); U.tagHi = Math.max(0, Math.min(opts.length - 1, (U.tagHi || 0) + (e.key === 'ArrowDown' ? 1 : -1))); render(); return; }
+    if (e.key === 'Enter') { e.preventDefault(); const o = opts[Math.min(U.tagHi || 0, opts.length - 1)]; if (o) tagAdd(p.id, o.t); return; }
+    if (e.key === 'Escape') { e.preventDefault(); U.tagQ = ''; closeMenu(); return; }
+  }
+  if (t.dataset && t.dataset.sadd === 'tag' && e.key === 'Enter') {
+    e.preventDefault(); const v = tagSlug(t.value); if (!v) return;
+    if (tagLib().includes(v)) { showToast('#' + v + ' is already on the list', false); return; }
+    settingsChange(st => { st.tags = (st.tags || []).concat([v]); }, '#' + v + ' added');
+    setTimeout(() => { const el = document.getElementById('add-tag'); if (el) { el.value = ''; el.focus(); } }, 0); return;
+  }
   if (t.dataset && t.dataset.sadd && e.key === 'Enter') {
     e.preventDefault(); const v = t.value.trim(); if (!v) return; const kind = t.dataset.sadd;
     if (kind === 'crew') { if ((S.settings.crews || []).some(c => c.toLowerCase() === v.toLowerCase())) { showToast(v + ' is already on the list', false); return; } settingsChange(st => { st.crews = (st.crews || []).concat([v]); }, v + ' added'); }
@@ -1781,6 +1924,8 @@ document.addEventListener('input', (e) => {
   if (t.dataset && t.dataset.scommit) U.busy = true;
   if (t.dataset && t.dataset.input === 'search') { U.search = t.value; render(); }
   if (t.dataset && t.dataset.input === 'tsearch') { U.tsearch = t.value; render(); }
+  if (t.dataset && t.dataset.input === 'asearch') { U.asearch = t.value; render(); }
+  if (t.dataset && t.dataset.input === 'tagq') { U.tagQ = t.value; U.tagHi = 0; render(); }
   if (t.dataset && t.dataset.wcommit) U.busy = true;
   if (t.dataset && t.dataset.commit) U.busy = true;
 });
@@ -1843,6 +1988,7 @@ app.addEventListener('dragend', () => { U.wdrag = null; U.cdrag = null; document
 function settingsCommit(el) {
   const v = el.value.trim();
   if (el.dataset.scommit === 'dname') { const d = designer(el.dataset.id); if (!v) { el.value = d.name; return; } if (v === d.name) return; settingsChange(st => { st.designers.find(x => x.id === d.id).name = v; }, 'Renamed to ' + v); }
+  if (el.dataset.scommit === 'tag') { const old = tagLib()[Number(el.dataset.i)]; if (!tagRename(old, v)) el.value = old; return; }
   if (el.dataset.scommit === 'crew') {
     const i = Number(el.dataset.i); const old = S.settings.crews[i]; if (!v) { el.value = old; return; } if (v === old) return;
     const beforeS = clone(S.settings); const touched = Object.values(S.projects).filter(p => p.crew === old).map(p => clone(p));
@@ -1920,9 +2066,15 @@ document.addEventListener('click', (e) => {
     case 'archiveFolder': removeFolder(a.dataset.id, 'arch'); break;
     case 'deleteFolder': removeFolder(a.dataset.id, 'gone'); break;
     case 'stats': toggleStats(); break;
+    case 'pstats': toggleFold('pstats'); break;
+    case 'tagSel': U.tagSel = v; render(); break;
+    case 'tagAdd': { const pid = (U.menu && U.menu.kind === 'tag' && U.menu.key) || U.route.id; tagAdd(pid, v); break; }
+    case 'tagDel': if (p || U.route.id) tagDel((p && p.id) || U.route.id, v); break;
+    case 'tagGo': U.search = '#' + v; U.menu = null; location.hash = '#/projects'; break;
+    case 'tagRemove': tagRemove(v); break;
     case 'statRange': U.statRange = v; lsSet('gs5:statRange', v); render(); break;
     case 'setSort': { closeMenu(); const key = k; if (key === 'sort') { U.sort = v; lsSet(LS.sort, v); } else if (key === 'tsort') { U.tsort = v; lsSet('gs5:tsort', v); } else if (key === 'asort') { U.asort = v; lsSet('gs5:asort', v); } render(); break; }
-    case 'menu': { const m = { kind: a.dataset.kind, key: a.dataset.key }; U.menu = U.menu && U.menu.kind === m.kind && U.menu.key === m.key ? null : m; U.menuFresh = !!U.menu; render(); U.menuFresh = false; break; }
+    case 'menu': { const m = { kind: a.dataset.kind, key: a.dataset.key }; U.menu = U.menu && U.menu.kind === m.kind && U.menu.key === m.key ? null : m; if (m.kind === 'tag') { U.tagQ = ''; U.tagHi = 0; } U.menuFresh = !!U.menu; render(); U.menuFresh = false; if (U.menu && U.menu.kind === 'tag') { const ti = document.getElementById('tag-in'); if (ti) ti.focus(); } break; }
     case 'setDesigner': closeMenu(); if (p && p.designer !== v) mutate(p.id, q => { q.designer = v; }, 'Designer changed to ' + designer(v).name); else render(); break;
     case 'toggle': toggleStep(k, p); break;
     case 'setStatus': closeMenu(); if (p && (v === 'Done' || v === 'N/A') && U.route.page !== 'project') { listComplete(p.id, k, v); break; } if (p) { const x = getItem(p, k); const before = curStage(p); if (x && x.st.s !== v) { mutate(p.id, q => setItem(q, k, { s: v, doneAt: v === 'Done' ? todayISO() : '' }), '“' + x.title + '” · ' + v); const after = curStage(S.projects[p.id]); if (after !== before) { U.open[p.id + ':' + after] = true; render(); } } else render(); } break;
