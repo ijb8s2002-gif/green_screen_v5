@@ -51,7 +51,9 @@ a{color:inherit}
 .side.collapsed .pbar{height:0;opacity:0}
 .pop{position:absolute;left:calc(100% + 16px);top:50%;width:220px;margin-top:-34px;padding:12px;border-radius:10px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadowHover);display:flex;flex-direction:column;gap:8px;opacity:0;visibility:hidden;transform:translateX(-6px);pointer-events:none;z-index:30}
 .side.collapsed .proj:hover .pop,.side.collapsed .proj:focus-visible .pop{opacity:1;visibility:visible;transform:none}
-.sideprojs{display:flex;flex-direction:column;gap:2px;min-height:0;overflow-x:hidden;overflow-y:auto;scrollbar-width:none}
+.sideprojwrap{display:flex;flex-direction:column;gap:6px;flex:1 1 0;min-height:0}
+.sideprojs{display:flex;flex-direction:column;gap:2px;min-height:0;overflow:visible}
+.sideprojs>.proj.cut{display:none}
 .sideprojs::-webkit-scrollbar{display:none}
 .proj .lbl{flex:1 1 auto;min-width:0;max-width:none}
 .side.collapsed .proj .lbl{flex:0 0 0;max-width:0}
@@ -493,7 +495,7 @@ h2{margin:0;font-size:15px;font-weight:600}
 .opsgrid.after{border-top:1px solid var(--line);align-items:stretch}
 .proc.na{color:var(--muted);border-style:dashed;opacity:.75}
 .proc.na .pk{border-style:dashed}
-.olabel{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 16px 4px}
+.olabel{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);padding:8px 16px 6px}
 .orow{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--line)}
 .orow:hover{background:var(--hover)}
 .orow .clink{max-width:100%}

@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.3.0';
+const APP_VERSION = '5.3.4';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -427,6 +427,7 @@ function render() {
     if (el) { el.value = keep.v; el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} }
   }
   renderSync();
+  fitSideProjects();
   const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute('content', getComputedStyle(r).getPropertyValue('--bg').trim() || '#F2ECE1');
 }
 /* Stage bar: the same bar elements are kept between renders and only their classes change,
@@ -455,7 +456,7 @@ function renderSide() {
     const badge = id === 'due' && due ? `<span class="navbadge" title="${due} overdue or due today">${due}</span>` : '';
     return `<a class="nav press${on ? ' on' : ''}" href="#/${id}" title="${label}">${ic}<span class="lbl">${label}</span>${badge}</a>`;
   }).join('');
-  const projs = activeProjects().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 7);
+  const projs = activeProjects().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 30);
   const projHtml = projs.length ? projs.map(p => {
     const it = projItems(p); const pr = progress(p, it); const cs = curStage(p, it);
     return `<a class="proj nav" href="#/project/${p.id}" aria-label="${esc(p.name)}"><span class="prow"><span class="dot" style="background:${dColor(p.designer)}"></span><span class="lbl">${esc(p.name)}</span></span>
@@ -465,7 +466,7 @@ function renderSide() {
   return `<aside class="side${U.collapsed ? ' collapsed' : ''}">
     <a class="brand" href="#/dashboard" title="Green Screen"><span class="logo">${I.leaf(28)}</span><span class="lbl" style="font-weight:600;font-size:16px;letter-spacing:-.01em;color:var(--ink)">Green Screen</span></a>
     <nav class="navlist" aria-label="Main">${navHtml}</nav>
-    <div style="display:flex;flex-direction:column;gap:6px;min-height:0">
+    <div class="sideprojwrap">
       <div class="sidehead"><span class="lbl">Open projects</span></div>
       <div class="sideprojs">${projHtml}</div>
     </div>
@@ -474,6 +475,18 @@ function renderSide() {
     <button class="toggle press" data-act="toggleSide" aria-label="${U.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}" title="${U.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}">${I.collapse}<span class="lbl">Collapse</span></button>
   </aside>`;
 }
+/* Sidebar open projects: show as many of the most recently edited as fit in the space above the
+   sync status, so the list never needs scrolling, on any screen. Re-measured on resize and collapse. */
+function fitSideProjects() {
+  const box = document.querySelector('.sideprojs'); if (!box) return;
+  const wrap = box.parentElement; const items = [...box.querySelectorAll(':scope > .proj')];
+  items.forEach(el => el.classList.remove('cut'));
+  const limit = wrap.getBoundingClientRect().bottom;
+  let cut = false;
+  items.forEach(el => { if (!cut && el.getBoundingClientRect().bottom > limit + 0.5) cut = true; if (cut) el.classList.add('cut'); });
+}
+let fitSideT = null;
+window.addEventListener('resize', () => { clearTimeout(fitSideT); fitSideT = setTimeout(fitSideProjects, 80); });
 function syncText() {
   const s = S.sync.state;
   if (s === 'saved') return ['Saved', ago(S.sync.at), 'All changes saved · synced across your devices'];
@@ -524,7 +537,7 @@ function pageProjects() {
   const q = U.search.trim().toLowerCase();
   const all = activeProjects();
   const list = all.filter(p => !q || (p.name + ' ' + p.address + ' ' + p.po).toLowerCase().includes(q));
-  const sorts = [['stage', 'Furthest stage'], ['recent', 'Recently edited'], ['urgent', 'Most urgent'], ['open', 'Most open steps']];
+  const sorts = [['stage', 'Furthest stage'], ['recent', 'Recently edited'], ['urgent', 'Most urgent'], ['open', 'Most open steps'], ['az', 'Client A–Z']];
   const head = `<div class="phead"><div><div class="eyebrow">${all.length} active ${all.length === 1 ? 'project' : 'projects'}</div><h1>Projects</h1></div>
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
       <label><span class="sr">Search projects</span><input id="f-search" class="search" placeholder="Search client, address or PO" value="${esc(U.search)}" data-input="search" autocomplete="off"></label>
@@ -537,6 +550,7 @@ function pageProjects() {
   const sorter = (a, b) => {
     const A = stageCounts(a), B = stageCounts(b);
     if (U.sort === 'recent') return (b.updatedAt || 0) - (a.updatedAt || 0);
+    if (U.sort === 'az') return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
     if (U.sort === 'urgent') return (B.urgent - A.urgent) || (B.medium - A.medium) || ((b.updatedAt || 0) - (a.updatedAt || 0));
     if (U.sort === 'open') return (B.open - A.open) || ((b.updatedAt || 0) - (a.updatedAt || 0));
     return (B.cs - A.cs) || ((b.updatedAt || 0) - (a.updatedAt || 0));
@@ -1438,15 +1452,24 @@ function activityDays() {
   Object.values(S.projects).forEach(p => projEvents(p).forEach(ev => addEvent(days, ev)));
   return days;
 }
+/* The tally keeps one year of history; older days are dropped (Stats never looks back further). */
+function activityCutoff() { const d = today0(); d.setFullYear(d.getFullYear() - 1); return isoOf(d); }
+function trimActivity() {
+  const days = (S.activity && S.activity.days) || {}; const cut = activityCutoff();
+  const old = Object.keys(days).filter(k => k < cut); if (!old.length) return;
+  const act = clone(S.activity); old.forEach(k => { delete act.days[k]; }); putMeta('activity', act);
+}
 function purgeArchive() {
   if (purgedOnce) return; if (!LOCAL_ONLY && !cloud.firstSnap) return;
   purgedOnce = true;
+  trimActivity();
   const r = retentionDays(); if (!r) return;
   const gone = Object.values(S.projects).filter(p => p.archived && !p.pinned && daysLeft(p) !== null && daysLeft(p) <= 0);
   if (!gone.length) return;
   /* keep their activity for Stats before they're deleted */
   const act = clone(S.activity && S.activity.days ? S.activity : { days: {} });
-  gone.forEach(p => projEvents(p).forEach(ev => addEvent(act.days, ev)));
+  const cut = activityCutoff();
+  gone.forEach(p => projEvents(p).forEach(ev => { if (ev.d >= cut) addEvent(act.days, ev); }));
   putMeta('activity', act);
   gone.forEach(p => removeProject(p.id));
 }
@@ -1884,7 +1907,7 @@ document.addEventListener('click', (e) => {
   const closeMenu = () => { U.menu = null; };
   switch (act) {
     case 'undo': doUndo(); break;
-    case 'toggleSide': U.collapsed = !U.collapsed; lsSet(LS.side, U.collapsed); render(); break;
+    case 'toggleSide': U.collapsed = !U.collapsed; lsSet(LS.side, U.collapsed); render(); setTimeout(fitSideProjects, 360); break;
     case 'newProject': openNewProject(); break;
     case 'npClose': if (U.np && !U.np.go) { U.np = null; renderModal(); } break;
     case 'npDesigner': U.np.d = v; renderModal(); break;
