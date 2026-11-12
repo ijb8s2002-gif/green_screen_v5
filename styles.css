@@ -226,7 +226,7 @@ h2{margin:0;font-size:15px;font-weight:600}
 .archbar,.gonebar{display:flex;align-items:center;gap:12px;padding:11px 14px;margin-bottom:14px;border-radius:12px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);font-size:13px;color:var(--muted)}
 .archbar .dico{width:22px;height:22px;border-radius:99px;background:var(--accent);color:var(--accentInk);display:grid;place-items:center;flex:none}
 .stagecard{padding:16px 18px;margin-bottom:22px}
-.segrow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.segrow{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
 .segbtn{border:0;background:transparent;padding:6px 0;cursor:pointer;display:flex;flex-direction:column;gap:7px;text-align:left;min-width:0}
 .segtrack{display:block;height:6px;border-radius:3px;background:var(--track);position:relative;overflow:hidden;transition:height .15s}
 .segbtn:hover .segtrack{height:9px}
@@ -430,6 +430,9 @@ h2{margin:0;font-size:15px;font-weight:600}
 .sum.hot b{color:var(--urgent)}
 .opsgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start;padding-bottom:6px}
 .opscol:first-child{border-right:1px solid var(--line)}
+.opsgrid.after{border-top:1px solid var(--line);align-items:stretch}
+.proc.na{color:var(--muted);border-style:dashed;opacity:.75}
+.proc.na .pk{border-style:dashed}
 .olabel{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 16px 4px}
 .orow{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--line)}
 .orow:hover{background:var(--hover)}

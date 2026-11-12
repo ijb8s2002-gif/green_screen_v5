@@ -1,11 +1,11 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.1.7';
+const APP_VERSION = '5.2.0';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
    ============================================================ */
-const STAGES = ['Appointment', 'Initial Design & Proposal', 'Ready to Present', 'Revise', 'Finalize & Process', 'Project Install', 'Warranty Replacements'];
-const SHORT = ['APPOINTMENT', 'INITIAL DESIGN', 'READY TO PRESENT', 'REVISE', 'FINALIZE & PROCESS', 'PROJECT INSTALL', 'WARRANTY'];
+const STAGES = ['Appointment', 'Initial Design & Proposal', 'Ready to Present', 'Revise', 'Finalize & Process', 'Project Install', 'Backorders', 'Warranty Replacements'];
+const SHORT = ['APPOINTMENT', 'INITIAL DESIGN', 'READY TO PRESENT', 'REVISE', 'FINALIZE & PROCESS', 'PROJECT INSTALL', 'BACKORDERS', 'WARRANTY'];
 const STATUSES = ['Not Started', 'In Progress', 'Delayed', 'Assigned', 'Done', 'N/A'];
 const SK = { 'Not Started': 'ns', 'In Progress': 'ip', 'Delayed': 'dl', 'Assigned': 'as', 'Done': 'dn', 'N/A': 'na' };
 const LEVELS = ['LOW', 'MEDIUM', 'URGENT'];
@@ -14,7 +14,20 @@ const COLORS = [['sage', 'Sage'], ['pine', 'Pine'], ['wheat', 'Wheat'], ['slate'
 
 const T = [[0, "Schedule Consult", ""], [0, "Create SharePoint Folder", "Link to existing Pipedrive deal and save to My Files"], [0, "Aerial Drawing", "Use measurements/contours from IA County Assessor or Beacon"], [0, "Initial Consult", "Meet client, take measurements & elevations on site"], [1, "Make Layout", ""], [1, "Sketch Prelim Options", "Design w/ client program, nursery list, and applicable site observations"], [1, "CAD Drawing", ""], [1, "CAD Redline Updates", "See notes on B&W copy in SharePoint"], [1, "Estimating Notes", "Highlight design regions on latest B&W plan"], [1, "Pipedrive: Estimating Task", "Clarify materials and existing site conditions w/ Estimating Team"], [1, "Pipedrive: Rendering Task", "Build in SketchUp; talk through view details w/ Graphics Team"], [2, "Schedule Present", ""], [2, "Review Plan & Proposal", "Make necessary edits to review sheet or B&W plan"], [2, "Color Rendering", ""], [2, "Plant Photo Sheet", "Build in Canva based off current perennial schedule"], [2, "Print Present Docs", "Includes proposal, sales review sheet, warranty info, nursery price list"], [2, "Customer Materials", "Paver samples & relevant past project pictures"], [2, "Design Present", ""], [3, "Client Follow-Up", "Check in with customer on plan revisions, sales progress, install timing"], [3, "Revision Meeting", "Finalize plan details, material specs, and pricing for approved project scope"], [3, "Update Plan & Proposal", ""], [3, "Finalize Sold Project", "Receive signed proposal + 25% deposit"], [3, "File Paperwork & Deposit", "Scan proposal into SharePoint & hand off deposit to business office"], [3, "Make Placeholder", "Pending updates and processed operations"], [4, "Prep Crewplan & Crewpics", ""], [4, "Send Ops Email", "Includes locates, relevant timing, manhours, most current review sheet"], [4, "Confirm Install Timing", "Reach out to client once project is added to tentative crew schedule"], [4, "Coordinate w/ Crew Leader", "Determine upcoming crew schedule w/ Group Leader and follow up w/ client"], [4, "Check Hardscape Materials", "Talk to Purchasing/Estimating Team"], [4, "Check Plant Availability", "Talk to Ames Tagging"], [4, "Request Utility Locates", ""], [4, "Special Order Perennials", "Talk to Nursery/Procurement Team about delivery timing prior to installation"], [4, "Confirm Tagged Plants", "Check at West Site and Retail locations to compare w/ current Tagging Sheet before project start"], [5, "Meet Crew Onsite", "Walk through installation details, best access, or flagged plantings"], [5, "Site Visit", "Monitor installation progress, address issues, layout perennial plantings, or meet w/ homeowner"], [5, "Process Completed Work Order", "Compare w/ onsite installation notes and edit subbed perennials for Nursery inventory"], [5, "Client Watering Instructions", ""], [5, "Take Finished Project Photos", ""], [6, "Pipedrive: Warranty Task", "Double-check any changes to warranty plant cultivars or original size"], [6, "Process Warranty Paperwork", ""]];
 const DEFAULT_OPTIONAL = ['w11', 'w20', 'w32'];
-const DEFAULT_WORKFLOW = T.map(([stage, title, detail], i) => ({ id: 'w' + (i + 1), stage, title, detail, optional: stage === 6 || DEFAULT_OPTIONAL.includes('w' + (i + 1)) }));
+/* Stage indexes: 0–5 as before, 6 = Backorders (custom, added v5.2.0), 7 = Warranty Replacements.
+   T lists Warranty as 6 (its original index); it's moved to 7 here. Backorder steps get their own permanent ids. */
+const ST_INSTALL = 5, ST_BACK = 6, ST_WARR = 7;
+const CUSTOM_STAGES = [ST_INSTALL, ST_BACK];
+const OPS_STAGES = [4, 5, ST_BACK, ST_WARR];
+const BACKORDER_STEPS = [
+  { id: 'wb1', stage: ST_BACK, title: 'Pipedrive: Backorder Task', detail: 'Double-check any changes to warranty plant cultivars or original size', optional: true },
+  { id: 'wb2', stage: ST_BACK, title: 'Process Backorder Paperwork', detail: '', optional: true }];
+const DEFAULT_WORKFLOW = (() => {
+  const wf = T.map(([stage, title, detail], i) => ({ id: 'w' + (i + 1), stage: stage === 6 ? ST_WARR : stage, title, detail, optional: stage === 6 || DEFAULT_OPTIONAL.includes('w' + (i + 1)) }));
+  const at = wf.findIndex(w => w.stage === ST_WARR);
+  wf.splice(at < 0 ? wf.length : at, 0, ...BACKORDER_STEPS.map(b => Object.assign({}, b)));
+  return wf;
+})();
 const DEFAULT_SETTINGS = {
   designers: [{ id: 'isaiah', name: 'Isaiah Bates', color: 'sage' }, { id: 'dan', name: 'Dan Van Weelden', color: 'pine' }, { id: 'justin', name: 'Justin Wigdahl', color: 'wheat' }],
   crews: ['Ken Small', 'Brad Oxley', 'Chuck Johnson', 'Jon Goodknight', 'Curtis Carlson', 'Michael Schreck', 'Kaleb Ross', 'Marcelo Montero', 'Evan Erichsen', 'Vaughn Gibson', 'Martin Huber', 'Peter Boman', 'Rob Lechnir', 'Rick Johnson', 'Nick Breuning'],
@@ -128,7 +141,7 @@ const U = {
   busy: false,
   tleave: {}, tback: {}, tgroups: {}, dgroups: {}, dsel: lsGet('gs5:dsel', 'all'), tsort: lsGet('gs5:tsort', 'due'), tsearch: '', dueDay: null,
   dash: lsGet('gs5:dash', {}), wopen: {}, wdrag: null,
-  oleave: {}, oback: {}, odrop: null, odrag: null, email: null, asort: lsGet('gs5:asort', 'recent')
+  oleave: {}, oback: {}, aleave: {}, odrop: null, odrag: null, email: null, asort: lsGet('gs5:asort', 'recent')
 };
 const LOCAL_ONLY = location.protocol === 'file:' || /[?&]local\b/.test(location.search);
 
@@ -196,10 +209,31 @@ async function initCloud() {
 }
 function runMigrations() {
   const done = S.settings.migrations || [];
-  if (done.includes('opt-11-20-32')) return;
-  const wf = clone(S.workflow); wf.forEach(w => { if (DEFAULT_OPTIONAL.includes(w.id)) w.optional = true; });
-  putMeta('workflow', wf);
-  const st = clone(S.settings); st.migrations = done.concat(['opt-11-20-32']); putMeta('settings', st);
+  const add = [];
+  let wf = null;
+  if (!done.includes('opt-11-20-32')) {
+    wf = clone(S.workflow); wf.forEach(w => { if (DEFAULT_OPTIONAL.includes(w.id)) w.optional = true; });
+    add.push('opt-11-20-32');
+  }
+  if (!done.includes('backorders-stage')) {
+    /* v5.2.0: insert the Backorders stage before Warranty Replacements. Workflow steps and
+       project-only steps store their stage as an index, so Warranty moves from 6 to 7. */
+    wf = wf || clone(S.workflow);
+    if (!wf.some(w => w.id === 'wb1')) {
+      wf.forEach(w => { if (w.stage >= ST_BACK) w.stage += 1; });
+      const at = wf.findIndex(w => w.stage === ST_WARR);
+      wf.splice(at < 0 ? wf.length : at, 0, ...BACKORDER_STEPS.map(b => Object.assign({}, b)));
+      Object.values(S.projects).forEach(p => {
+        if (!(p.custom || []).some(c => c.stage >= ST_BACK)) return;
+        const q = clone(p); q.custom.forEach(c => { if (c.stage >= ST_BACK) c.stage += 1; });
+        putProject(q, { keepTime: true });
+      });
+    }
+    add.push('backorders-stage');
+  }
+  if (!add.length) return;
+  if (wf) putMeta('workflow', wf);
+  const st = clone(S.settings); st.migrations = done.concat(add); putMeta('settings', st);
 }
 function onAuthed() {
   const fs = cloud.fs;
@@ -257,8 +291,11 @@ function projItems(p) {
 function stageItems(p, si, items) { return (items || projItems(p)).filter(x => x.stage === si); }
 function curStage(p, items) {
   items = items || projItems(p);
-  for (let si = 0; si < 7; si++) if (items.some(x => x.stage === si && !x.optional && !isClosed(x.st.s))) return si;
-  return 6;
+  for (let si = 0; si < STAGES.length; si++) if (items.some(x => x.stage === si && !x.optional && !isClosed(x.st.s))) return si;
+  /* Install is complete: the current stage is the first after-install stage (Backorders, Warranty)
+     that still has anything open, optional steps included; the last stage once everything is closed. */
+  for (let si = ST_BACK; si < STAGES.length; si++) if (items.some(x => x.stage === si && !isClosed(x.st.s))) return si;
+  return STAGES.length - 1;
 }
 function progress(p, items) {
   items = items || projItems(p);
@@ -565,9 +602,9 @@ function pageProject() {
       ${p.archived ? '' : `<button class="btn press" data-act="archiveProject" title="Archive project">${I.box(14)}Archive</button>`}
       <button class="btn del press" data-act="deleteProject" title="Delete project">${I.trash()}Delete</button>
     </div></div>`;
-  const askArchive = cs === 6 && !p.noArchivePrompt && !U.gone && !p.archived;
+  const askArchive = cs >= ST_BACK && !p.noArchivePrompt && !U.gone && !p.archived;
   const archNote = p.archived ? `<div class="archbar pop-in" role="status" style="background:var(--kraft)"><span class="dico" style="background:var(--muted)">${I.box(12)}</span><span><span style="color:var(--ink);font-weight:500">This project is archived.</span> ${p.pinned ? 'It’s pinned, so it’s kept.' : daysLeft(p) === null ? '' : 'It deletes in ' + Math.max(0, daysLeft(p)) + (daysLeft(p) === 1 ? ' day' : ' days') + ' unless you pin or restore it.'}</span><span style="margin-left:auto"><button class="btn pri press" data-act="restoreHere" style="font-size:13px;padding:7px 12px">Restore to Projects</button></span></div>` : '';
-  const archBar = askArchive ? `<div class="archbar pop-in" role="status"><span class="dico">${I.tick(12)}</span><span><span style="color:var(--ink);font-weight:500">Project Install is complete.</span> Archive this project? Warranty steps stay open if you keep it.</span><span style="margin-left:auto;display:flex;gap:6px"><button class="btn pri press" data-act="archiveProject" style="font-size:13px;padding:7px 12px">${I.box(14)}Archive project</button><button class="btn press" data-act="notNow">Not now</button></span></div>` : '';
+  const archBar = askArchive ? `<div class="archbar pop-in" role="status"><span class="dico">${I.tick(12)}</span><span><span style="color:var(--ink);font-weight:500">Project Install is complete.</span> Archive this project? Backorder and warranty steps stay open if you keep it.</span><span style="margin-left:auto;display:flex;gap:6px"><button class="btn pri press" data-act="archiveProject" style="font-size:13px;padding:7px 12px">${I.box(14)}Archive project</button><button class="btn press" data-act="notNow">Not now</button></span></div>` : '';
   // stage bar
   const hold = U.segHold && U.segHold.pid === p.id ? U.segHold.i : null;
   const vcs = hold !== null ? hold : cs;
@@ -586,7 +623,7 @@ function pageProject() {
     if (showDone) doneBar = doneBar.replace('class="ibtn press" data-act="toggleDone"', 'class="ibtn press" style="transform:rotate(90deg)" data-act="toggleDone"');
   }
   const stagesToShow = [];
-  for (let si = 0; si < 7; si++) { if (si < cs && !U.showDone[p.id]) continue; stagesToShow.push(si); }
+  for (let si = 0; si < STAGES.length; si++) { if (si < cs && !U.showDone[p.id]) continue; stagesToShow.push(si); }
   const cards = stagesToShow.map(si => stageHtml(p, si, cs, items)).join('');
   return head + archNote + archBar + stageCard + `<div style="display:flex;flex-direction:column;gap:10px">${doneBar}${cards}</div>`;
 }
@@ -598,8 +635,8 @@ function stageHtml(p, si, cs, items) {
   const done = counted.filter(x => x.st.s === 'Done').length;
   const optN = list.filter(x => x.optional && x.st.s !== 'N/A').length;
   const badge = si < cs ? '' : si === cs ? '<span class="badge cur">CURRENT</span>' : '<span class="badge up">UPCOMING</span>';
-  const src = si === 5 ? '<span class="badge custom">CUSTOM STAGE</span>' : '';
-  const opsBtn = (si === 4 || si === 5) ? `<button class="opslink press" data-act="goOps" title="See this stage across all jobs">${I.truck(13)}Operations ›</button>` : '';
+  const src = CUSTOM_STAGES.includes(si) ? '<span class="badge custom">CUSTOM STAGE</span>' : '';
+  const opsBtn = OPS_STAGES.includes(si) ? `<button class="opslink press" data-act="goOps" title="See this stage across all jobs">${I.truck(13)}Operations ›</button>` : '';
   const pending = list.some(x => !isClosed(x.st.s));
   const actBtn = si < cs ? `<button class="btn press" data-act="reopen" data-i="${si}" style="font-size:12px;padding:5px 10px">${I.reopen}Reopen stage</button>`
     : pending ? `<button class="btn press" data-act="complete" data-i="${si}" style="font-size:12px;padding:5px 10px">${I.tick(12, 'currentColor')}Complete stage</button>` : '';
@@ -699,7 +736,7 @@ function taskRow(r, opts = {}) {
   const isProc = x.key === 'w25' || x.key === 'w26';
   const procTag = isProc ? `<button class="opslink sm press" data-act="goOps"${x.key === 'w26' ? ` data-email="${p.id}"` : ''} title=""${x.key === 'w26' ? 'Write the ops email on Operations' : 'Processing step · open Operations'}">${x.key === 'w26' ? 'OPS EMAIL ›' : 'PROCESSING ›'}</button>` : '';
   const tags = (x.kind === 'c' ? '<span class="ptag">THIS PROJECT</span>' : '') + (r.upcoming && opts.showUpcoming ? '<span class="ptag up" title="Here because of its date · joins the Tasklist when its stage becomes current">UPCOMING STAGE</span>' : '') + procTag;
-  const isOpsStage = x.stage === 4 || x.stage === 5;
+  const isOpsStage = OPS_STAGES.includes(x.stage);
   const stageCell = isOpsStage ? `<span style="min-width:0;display:flex"><button class="opslink press" data-act="goOps" title="Open Operations" style="padding:2px 9px;max-width:100%;overflow:hidden;text-overflow:ellipsis">${I.truck(13)}${STAGES[x.stage]}</button></span>` : `<span class="tcell">${STAGES[x.stage]}</span>`;
   const d = designer(p.designer);
   return `<div class="${cls}" data-mk="${mk}">
@@ -822,7 +859,7 @@ function pageDashboard() {
   // operations snapshot
   const jobs = opsJobs();
   const { proc, now: installing, upcoming: scheduled } = opsParts();
-  const sums = [[proc.length, 'to process', proc.length ? ' hot' : ''], [installing.length, 'installing now', ''], [scheduled.filter(p => p.installDate).length, 'scheduled', ''], [scheduled.filter(p => !p.installDate).length, 'not scheduled', '']];
+  const sums = [[proc.length, 'to process', proc.length ? ' hot' : ''], [installing.length, 'installing now', ''], [scheduled.filter(p => p.installDate).length, 'scheduled', ''], [scheduled.filter(p => !p.installDate).length, 'not scheduled', ''], [afterJobs(ST_BACK).length, 'backorders', ''], [afterJobs(ST_WARR).length, 'warranty', '']];
   const procRows = proc.length ? proc.map(p => {
     const s = p.steps || {}; const d25 = (s.w25 || {}).s === 'Done', d26 = (s.w26 || {}).s === 'Done';
     const soldAt = (s.w22 || {}).doneAt; const age = soldAt ? Math.max(0, -daysFrom(soldAt)) : null;
@@ -840,7 +877,7 @@ function pageDashboard() {
     return `<button class="irow" data-act="goOps" title="Open in Operations"><span style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(shortName(p.name))}${now ? '<span class="nowtag">NOW</span>' : ''}</span><span style="font-size:11.5px;color:var(--muted)">${esc(p.crew || 'No crew leader yet')}</span></span><span class="mono" style="font-size:11.5px;color:var(--${warn ? 'urgent' : now ? 'prog' : 'muted'})">${date}</span><span class="progbtn${done === ids.length ? ' done' : warn ? ' warn' : ''}"><span class="pbar2"><i style="width:${Math.round(done / ids.length * 100)}%"></i></span><span class="pnum">${done}/${ids.length}</span><span>${now ? 'Install' : 'Pre-install'}</span></span></button>`;
   }).join('') : `<div class="gempty" style="padding:8px 16px 12px">No jobs past processing yet.</div>`;
   const opsCard = `<section class="card dcard rise" style="animation-delay:70ms"><div class="dhd">${tog('o', 'Operations', `<span style="color:var(--muted);display:flex">${I.truck(15)}</span>`)}<span class="sums">${sums.map(([n, l, c]) => `<span class="sum${c}"><b>${n}</b>${l}</span>`).join('')}</span><button class="dlink press" data-act="goOps">Big board ›</button></div>
-    ${dc.o ? '' : `<div class="cbody opsgrid"><div class="opscol"><div class="olabel">Needs processing</div>${procRows}</div><div class="opscol"><div class="olabel">Installs</div>${instRows}</div></div>`}</section>`;
+    ${dc.o ? '' : `<div class="cbody opsgrid"><div class="opscol"><div class="olabel">Needs processing</div>${procRows}</div><div class="opscol"><div class="olabel">Installs</div>${instRows}</div></div><div class="opsgrid after"><div class="opscol"><div class="olabel">Backorders</div>${afterMini(ST_BACK)}</div><div class="opscol"><div class="olabel">Warranty replacements</div>${afterMini(ST_WARR)}</div></div>`}</section>`;
   // recently edited (one row)
   const recent = activeProjects().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 16);
   const recCard = `<section class="drawer rise" style="animation-delay:140ms;margin-top:18px"><div class="dhd" style="padding:12px 16px">${tog('r', 'Recently edited')}<button class="dlink press" data-act="navx" data-v="#/projects">All projects ›</button></div>
@@ -905,7 +942,7 @@ function pageWorkflow() {
   const stages = STAGES.map((name, si) => {
     const list = wf.map((w, i) => ({ w, n: i + 1 })).filter(r => r.w.stage === si);
     const open = U.wopen[si] !== undefined ? U.wopen[si] : true;
-    const src = si === 5 ? '<span class="badge custom">CUSTOM STAGE · NOT IN PIPEDRIVE</span>' : '<span style="font-size:12px;color:var(--muted)">Pipedrive stage</span>';
+    const src = CUSTOM_STAGES.includes(si) ? '<span class="badge custom">CUSTOM STAGE · NOT IN PIPEDRIVE</span>' : '<span style="font-size:12px;color:var(--muted)">Pipedrive stage</span>';
     const rows = list.map(({ w, n }, j) => `<div class="step wrow-grid${U.wdrag === w.id ? ' dragging' : ''}" data-wid="${w.id}" data-stage="${si}" draggable="true">
       <span class="grip" title="Drag to reorder" aria-hidden="true">${svg(14, '<circle cx="9" cy="6" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="18" r="1"></circle>', 2.4)}</span>
       <span class="snum">${n}</span>
@@ -985,10 +1022,10 @@ function pageOperations() {
   const { proc, now, upcoming } = opsParts();
   const procAll = proc.concat(Object.keys(U.oleave).map(id => S.projects[id]).filter(p => p && !proc.includes(p)));
   const sched = upcoming.filter(p => p.installDate).length;
-  const head = `<div class="phead"><div><div class="eyebrow">Finalize &amp; Process · Project Install</div><h1>Operations</h1></div>
-    <div class="sums" style="margin:0">${[[proc.length, 'to process', proc.length ? ' hot' : ''], [now.length, 'installing now', ''], [sched, 'scheduled', ''], [upcoming.length - sched, 'not scheduled', '']].map(([n, l, c]) => `<span class="sum${c}"><b>${n}</b>${l}</span>`).join('')}</div></div>`;
-  if (!opsJobs().length && !Object.keys(U.oleave).length) {
-    return head + `<div class="empty rise"><h2>No jobs in Finalize &amp; Process yet</h2><p>Jobs show up here once their Revise stage is complete. Jobs with Crewplan or Ops Email marked N/A are left off.</p></div>`;
+  const head = `<div class="phead"><div><div class="eyebrow">Finalize &amp; Process · Project Install · Backorders · Warranty</div><h1>Operations</h1></div>
+    <div class="sums" style="margin:0">${[[proc.length, 'to process', proc.length ? ' hot' : ''], [now.length, 'installing now', ''], [sched, 'scheduled', ''], [upcoming.length - sched, 'not scheduled', ''], [afterJobs(ST_BACK).length, 'backorders', ''], [afterJobs(ST_WARR).length, 'warranty', '']].map(([n, l, c]) => `<span class="sum${c}"><b>${n}</b>${l}</span>`).join('')}</div></div>`;
+  if (!opsJobs().length && !Object.keys(U.oleave).length && !afterJobs(ST_BACK).length && !afterJobs(ST_WARR).length && !Object.keys(U.aleave).length) {
+    return head + `<div class="empty rise"><h2>No jobs in Finalize &amp; Process yet</h2><p>Jobs show up here once their Revise stage is complete, and stay through Backorders and Warranty Replacements. Jobs with Crewplan or Ops Email marked N/A are left off.</p></div>`;
   }
   // needs processing
   const procRows = procAll.length ? procAll.map(p => {
@@ -1007,7 +1044,7 @@ function pageOperations() {
   const byDate = (a, b) => (a.installDate ? daysFrom(a.installDate) : 9999) - (b.installDate ? daysFrom(b.installDate) : 9999) || a.name.localeCompare(b.name);
   const sec = (id, title, list, sub) => `<section class="card dcard rise sched${U.odrop === id ? ' dropping' : ''}" data-dropzone="${id}" style="animation-delay:${id === 'now' ? 60 : 110}ms"><div class="dhd"><h2>${title}</h2><span class="mono" style="font-size:12px;color:var(--muted)">${list.length}</span></div>
     ${list.length ? `<div class="colhead srow-grid"><span></span><span>Job</span><span>Install date</span><span>Crew leader</span><span>Progress</span><span></span></div>${list.slice().sort(byDate).map(p => schedRow(p, id)).join('')}` : `<div class="gempty dropzone-empty" style="padding:6px 18px 16px">${id === 'now' ? 'Nothing installing right now. Drag a job here when the crew starts.' : 'No processed jobs waiting. Jobs land here once steps 25 and 26 are done.'}</div>`}</section>`;
-  return head + `<div style="display:flex;flex-direction:column;gap:18px">${procCard}${sec('now', 'Installing now', now, 'crew is on site')}${sec('up', 'Upcoming', upcoming, 'drag between sections to organize · doesn’t change any steps')}</div>`;
+  return head + `<div style="display:flex;flex-direction:column;gap:18px">${procCard}${sec('now', 'Installing now', now, 'crew is on site')}${sec('up', 'Upcoming', upcoming, 'drag between sections to organize · doesn’t change any steps')}${afterCard(ST_BACK, 160)}${afterCard(ST_WARR, 210)}</div>`;
 }
 function schedRow(p, zone) {
   const isNow = zone === 'now'; const ids = opsItems(p, isNow ? 5 : 4);
@@ -1043,6 +1080,66 @@ function procBothAnim(pid) {
   const finish = () => { delete U.oleave[pid]; mutate(pid, q => { [25, 26].forEach(n => setItem(q, wfIdForN(n), { s: 'Done', doneAt: todayISO() })); }, shortName(p.name) + ' processed · steps 25–26 checked', { onUndo: () => { U.oback[pid] = true; setTimeout(() => { delete U.oback[pid]; }, 500); } }); };
   if (!motionOK()) return finish();
   U.oleave[pid] = true; render(); setTimeout(finish, 620);
+}
+
+/* After-install tracking: Backorders (stage 6) and Warranty Replacements (stage 7).
+   A job is listed once Project Install is complete, until every step in that stage is Done or N/A.
+   Same exclusions as the rest of Operations (steps 25/26 N/A); archived jobs drop off. */
+function installDone(p, items) { return !items.some(x => x.stage <= ST_INSTALL && !x.optional && !isClosed(x.st.s)); }
+function installedAge(p) {
+  let last = ''; S.workflow.forEach(w => { if (w.stage === ST_INSTALL) { const d = ((p.steps || {})[w.id] || {}).doneAt || ''; if (d > last) last = d; } });
+  return last ? Math.max(0, -daysFrom(last)) : null;
+}
+function afterJobs(si) {
+  return activeProjects().filter(p => {
+    if (stepS(p, 25) === 'N/A' || stepS(p, 26) === 'N/A') return false;
+    const items = projItems(p);
+    return installDone(p, items) && items.some(x => x.stage === si && !isClosed(x.st.s));
+  }).sort((a, b) => (installedAge(b) ?? -1) - (installedAge(a) ?? -1) || a.name.localeCompare(b.name));
+}
+const afterLabel = (t) => /^pipedrive:/i.test(t) ? 'Pipedrive task' : /paperwork/i.test(t) ? 'Paperwork' : t;
+function afterPills(p, si) {
+  return stageItems(p, si).map(x => { const s = x.st.s; const on = s === 'Done', na = s === 'N/A';
+    return `<button class="proc press${on ? ' on' : ''}${na ? ' na' : ''}" data-act="afterStep" data-pid="${p.id}" data-k="${x.key}" aria-pressed="${on}" title="${esc(x.title)}${na ? ' · N/A (click to reopen)' : on ? ' · done (click to reopen)' : ' · click to mark done'}"><span class="pk"></span>${esc(afterLabel(x.title))}${na ? ' · N/A' : ''}</button>`; }).join('');
+}
+function afterHalf(p, si) { const l = stageItems(p, si); const c = l.filter(x => isClosed(x.st.s)).length; return c > 0 && c < l.length; }
+function afterSet(pid, si, status, anim) {
+  const p = S.projects[pid]; if (!p) return; const lk = pid + ':' + si;
+  if (U.aleave[lk]) return;
+  const keys = stageItems(p, si).filter(x => !isClosed(x.st.s)).map(x => x.key);
+  if (!keys.length) return;
+  const label = shortName(p.name) + ' · ' + STAGES[si] + (status === 'Done' ? ' done' : ' marked N/A');
+  const finish = () => { delete U.aleave[lk]; mutate(pid, q => { keys.forEach(k => setItem(q, k, { s: status, doneAt: status === 'Done' ? todayISO() : '' })); }, label, { onUndo: () => { U.oback[lk] = true; setTimeout(() => { delete U.oback[lk]; }, 500); } }); };
+  if (!anim || !motionOK()) return finish();
+  U.aleave[lk] = true; render(); setTimeout(finish, 620);
+}
+function afterStep(pid, k) {
+  const p = S.projects[pid]; if (!p) return; const x = getItem(p, k); if (!x) return;
+  const next = isClosed(x.st.s) ? 'Not Started' : 'Done';
+  mutate(pid, q => setItem(q, k, { s: next, doneAt: next === 'Done' ? todayISO() : '' }), '“' + x.title + '” ' + (next === 'Done' ? 'checked' : 'reopened') + ' · ' + shortName(p.name));
+}
+function afterCard(si, delay) {
+  const list = afterJobs(si);
+  const all = list.concat(Object.keys(U.aleave).filter(k => k.endsWith(':' + si)).map(k => S.projects[k.split(':')[0]]).filter(p => p && !list.includes(p)));
+  const rows = all.map(p => { const lk = p.id + ':' + si; const age = installedAge(p);
+    return `<div class="orow2${U.aleave[lk] ? ' leaving' : ''}${U.oback[lk] ? ' back' : ''}">
+      <button class="ock press${afterHalf(p, si) ? ' half' : ''}" data-act="afterDone" data-pid="${p.id}" data-i="${si}" title="Mark every ${esc(STAGES[si])} step done" aria-label="Mark ${esc(p.name)} ${esc(STAGES[si])} done">${I.tick()}</button>
+      <span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="dot" style="width:7px;height:7px;background:${dColor(p.designer)}"></span><a href="#/project/${p.id}" class="clink" title="${esc(p.name)}">${esc(shortName(p.name))}</a></span>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${afterPills(p, si)}<button class="ewrite press" data-act="afterNA" data-pid="${p.id}" data-i="${si}" title="Mark the open ${esc(STAGES[si])} steps N/A">None needed</button></span>
+      <span class="mono" style="font-size:12px;color:var(--muted);text-align:right" title="${age === null ? 'Install finish date not recorded' : 'Install finished ' + age + ' days ago'}">${age === null ? '—' : age + 'd ago'}</span>
+    </div>`; }).join('');
+  const empty = si === ST_BACK ? 'No open backorders.' : 'No open warranty replacements.';
+  return `<section class="card dcard rise" style="animation-delay:${delay}ms"><div class="dhd"><h2>${STAGES[si]}</h2><span class="mono" style="font-size:12px;color:var(--muted)">${list.length}</span></div>
+    ${all.length ? `<div class="colhead ohead"><span></span><span>Job</span><span>Steps</span><span style="text-align:right">Installed</span></div>${rows}` : `<div class="gempty" style="padding:6px 18px 16px">${empty} Jobs show up here once Project Install is complete, until both steps are Done or N/A.</div>`}</section>`;
+}
+function afterMini(si) {
+  const list = afterJobs(si);
+  return list.length ? list.map(p => { const age = installedAge(p);
+    return `<div class="orow"><button class="ock press${afterHalf(p, si) ? ' half' : ''}" data-act="afterDone" data-pid="${p.id}" data-i="${si}" title="Mark every ${esc(STAGES[si])} step done" aria-label="Mark ${esc(p.name)} ${esc(STAGES[si])} done">${I.tick()}</button>
+      <span style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="display:flex;align-items:center;gap:7px;min-width:0"><span class="dot" style="width:7px;height:7px;background:${dColor(p.designer)}"></span><a href="#/project/${p.id}" class="clink" style="font-size:13px" title="${esc(p.name)}">${esc(shortName(p.name))}</a></span>
+      <span style="display:flex;gap:5px;flex-wrap:wrap">${afterPills(p, si)}</span></span>
+      <span class="mono" style="font-size:11.5px;align-self:start;padding-top:2px;color:var(--muted)" title="${age === null ? 'Install finish date not recorded' : 'Install finished ' + age + ' days ago'}">${age === null ? '—' : age + 'd'}</span></div>`; }).join('')
+    : `<div class="gempty" style="padding:8px 16px 12px">${si === ST_BACK ? 'No open backorders.' : 'No open warranty replacements.'}</div>`;
 }
 
 /* ============================================================
@@ -1289,7 +1386,6 @@ function settingsChange(fn, label) {
 /* ============================================================
    NEW PROJECT MODAL
    ============================================================ */
-const NPEND = [4, 11, 18, 24, 33, 38, 40];
 function openNewProject() {
   U.np = { name: '', address: '', po: '', d: lsGet(LS.lastDesigner, (designers()[0] || {}).id || 'isaiah'), stage: 0, err: false, go: false };
   if (!designers().some(d => d.id === U.np.d)) U.np.d = (designers()[0] || {}).id;
@@ -1297,7 +1393,7 @@ function openNewProject() {
   setTimeout(() => { const el = document.getElementById('np-name'); if (el) el.focus(); }, 30);
 }
 function npDup() { const n = (U.np.name || '').trim().toLowerCase(); if (!n) return null; return activeProjects().find(p => p.name.trim().toLowerCase() === n) || null; }
-function npStageNote() { const s = U.np.stage; return s === 0 ? 'nothing marked done yet' : 'steps 1–' + NPEND[s - 1] + ' will be marked done'; }
+function npStageNote() { const s = U.np.stage; let last = 0; S.workflow.forEach((w, i) => { if (w.stage < s) last = i + 1; }); return s === 0 || !last ? 'nothing marked done yet' : 'steps 1–' + last + ' will be marked done'; }
 function renderModal() {
   const box = document.getElementById('overlay'); if (!box) return;
   box.className = 'gs-' + U.theme;
@@ -1317,7 +1413,7 @@ function renderModal() {
     </div>
     <div class="npf"><span>Starting stage</span>
       <div style="display:flex;gap:4px" role="radiogroup" aria-label="Starting stage">${STAGES.map((n, i) => `<button class="npseg${i < np.stage ? ' on' : i === np.stage ? ' now' : ''}" role="radio" aria-checked="${i === np.stage}" data-act="npStage" data-v="${i}" title="Start at ${n}" aria-label="Start at ${n}"><i></i></button>`).join('')}</div>
-      <div class="npnote"><span style="color:var(--ink);font-weight:500">${STAGES[np.stage]}</span> · ${npStageNote()}${np.stage === 4 || np.stage === 5 ? `<span class="npops">${I.truck(11)} Shows on Operations</span>` : ''}</div>
+      <div class="npnote"><span style="color:var(--ink);font-weight:500">${STAGES[np.stage]}</span> · ${npStageNote()}${OPS_STAGES.includes(np.stage) ? `<span class="npops">${I.truck(11)} Shows on Operations</span>` : ''}</div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:12px;margin-top:2px"><span style="font-size:12px;color:var(--muted)">Enter to create · Esc to cancel</span><button class="btn ghost press" data-act="npClose" style="margin-left:auto;font-size:14px;padding:8px 14px">Cancel</button><button id="np-create" class="btn pri press" data-act="npCreate" ${np.name.trim() ? '' : 'disabled style="opacity:.45;cursor:default"'}>Create project</button></div>
   </div>`;
@@ -1381,7 +1477,7 @@ function reopenFrom(idx) {
   U.open[p.id + ':' + idx] = true; U.showDone[p.id] = false;
   const segs = {}; for (let k = Math.max(cs, idx), n = 0; k >= idx; k--, n++) segs[k] = n;
   if (motionOK()) U.unc = { pid: p.id, ids };
-  mutate(p.id, q => { toReset.forEach(x => setItem(q, x.key, { s: 'Not Started', doneAt: '' })); q.noArchivePrompt = false; }, 'Back to ' + STAGES[idx] + (idx < 6 ? ' · later stages reopened' : ''));
+  mutate(p.id, q => { toReset.forEach(x => setItem(q, x.key, { s: 'Not Started', doneAt: '' })); q.noArchivePrompt = false; }, 'Back to ' + STAGES[idx] + (idx < STAGES.length - 1 ? ' · later stages reopened' : ''));
   setTimeout(() => { U.unc = null; U.sweep = null; }, Math.max(1100, inStage.length * 45 + 800));
 }
 function segPick(i) {
@@ -1687,6 +1783,9 @@ document.addEventListener('click', (e) => {
     case 'dgroup': { const o = U.dgroups[v] !== undefined ? U.dgroups[v] : v !== 'later'; U.dgroups[v] = !o; render(); break; }
     case 'dueDay': U.dueDay = !v || U.dueDay === v ? null : v; render(); break;
     case 'tcheck': listComplete(a.dataset.pid, k); break;
+    case 'afterDone': if (p) afterSet(p.id, Number(a.dataset.i), 'Done', U.route.page === 'operations'); break;
+    case 'afterNA': if (p) afterSet(p.id, Number(a.dataset.i), 'N/A', U.route.page === 'operations'); break;
+    case 'afterStep': if (p) afterStep(p.id, k); break;
     case 'procBoth': if (p) procSet(p.id, { w25: true, w26: true }, p.name + ' processed · steps 25–26 checked'); break;
     case 'procOne': if (p) { const cur = ((p.steps || {})[k] || {}).s === 'Done'; procSet(p.id, { [k]: !cur }, (k === 'w25' ? 'Crewplan & pics' : 'Ops email') + (cur ? ' unchecked' : ' checked') + ' · ' + p.name); } break;
     case 'dashToggle': U.dash[v] = !U.dash[v]; lsSet('gs5:dash', U.dash); render(); break;
