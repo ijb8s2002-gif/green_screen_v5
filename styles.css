@@ -59,7 +59,7 @@ a{color:inherit}
 .syncind{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;font-size:12.5px;color:var(--muted);text-decoration:none;margin-top:auto;flex:none}
 .syncind:hover{background:var(--hover);color:var(--ink)}
 .sdot{position:relative;width:8px;height:8px;border-radius:99px;background:var(--accent);flex:none;margin:0 4px}
-.sdot::after{content:"";position:absolute;inset:-3px;border-radius:99px;border:1.5px solid var(--accent);opacity:0;animation:syncping 3.2s ease-out infinite}
+.sdot::after{content:"";position:absolute;box-sizing:border-box;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:99px;border:1.5px solid var(--accent);opacity:0;animation:syncping 3.2s ease-out infinite;transform-origin:50% 50%}
 .sync-saving .sdot::after{animation-duration:1s}
 .sync-offline .sdot,.sync-local .sdot{background:transparent;box-shadow:inset 0 0 0 1.5px var(--muted)}
 .sync-offline .sdot::after,.sync-local .sdot::after,.sync-error .sdot::after{display:none}
@@ -396,6 +396,16 @@ h2{margin:0;font-size:15px;font-weight:600}
 .sdots i{flex:none;width:5px;height:5px;border-radius:99px;display:block;background:var(--muted);opacity:.75}
 .sdmore{font-family:'Geist Mono',monospace;font-size:9px;line-height:1;color:var(--muted)}
 .scell.on .sdots i{background:var(--accentInk);opacity:.9}
+.sdots i.sdi{width:6px;height:6px;opacity:1}
+.scell.on .sdots i.sdi{box-shadow:0 0 0 1.5px var(--accentInk)}
+.slegend{display:flex;gap:16px;justify-content:flex-end;font-size:11.5px;color:var(--muted);margin:-8px 2px 14px}
+.slegend span{display:inline-flex;align-items:center;gap:6px}
+.slegend i{width:5px;height:5px;border-radius:99px;background:var(--muted);opacity:.75;display:inline-block}
+.slegend i.sdi{width:6px;height:6px;opacity:1;box-shadow:0 0 0 1.5px var(--bg)}
+.instline{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:-4px 0 14px;font-size:13px;color:var(--muted)}
+.instchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:12.5px;font-weight:500;padding:4px 10px;border-radius:99px;cursor:pointer}
+.instchip:hover{background:var(--hover)}
+.instchip .muted{font-weight:400}
 .scell.on .sdmore{color:var(--accentInk)}
 
 /* ---------- dashboard ---------- */

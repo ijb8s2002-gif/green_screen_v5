@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.1.3';
+const APP_VERSION = '5.1.6';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -64,7 +64,7 @@ const motionOK = () => U.motion && !(window.matchMedia && window.matchMedia('(pr
    ============================================================ */
 const svg = (w, body, sw = 1.8) => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 const I = {
-  leaf: (w = 16, c = 'var(--accentInk)') => `<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 21V9"></path><path d="M12 13c-4 0-6-3-6-7 4 0 6 3 6 7z"></path><path d="M12 10c0-4 2-6 6-6 0 4-2 6-6 6z"></path></svg>`,
+  leaf: (w = 28) => `<svg width="${w}" height="${w}" viewBox="0 0 120 120" aria-hidden="true"><g fill="var(--accentInk)"><path transform="translate(59 80) rotate(36)" d="M0 0C34 -15 30 -59 0 -76C-30 -59 -34 -15 0 0Z"></path><path transform="translate(59 80) rotate(-52)" d="M0 0C25 -11 22 -45 0 -58C-22 -45 -25 -11 0 0Z"></path></g><path d="M59 78L60 108" stroke="var(--accentInk)" stroke-width="7.5" stroke-linecap="round"></path><path d="M35 58.4L59 76L88.7 37.5" fill="none" stroke="var(--accent)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>`,
   dash: svg(16, '<rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect>'),
   list: svg(16, '<path d="M9 6h11M9 12h11M9 18h11"></path><path d="M4 6h.01M4 12h.01M4 18h.01"></path>'),
   clock: svg(16, '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>'),
@@ -420,13 +420,14 @@ function renderSide() {
       <span class="pbar"><i style="width:${pr.pct}%;background:${dColor(p.designer)}"></i></span></a>`;
   }).join('') : `<div class="lbl" style="font-size:12.5px;color:var(--muted);padding:2px 10px;white-space:normal">No open projects yet</div>`;
   return `<aside class="side${U.collapsed ? ' collapsed' : ''}">
-    <a class="brand" href="#/dashboard" title="Green Screen"><span class="logo">${I.leaf()}</span><span class="lbl" style="font-weight:600;font-size:16px;letter-spacing:-.01em;color:var(--ink)">Green Screen</span></a>
+    <a class="brand" href="#/dashboard" title="Green Screen"><span class="logo">${I.leaf(28)}</span><span class="lbl" style="font-weight:600;font-size:16px;letter-spacing:-.01em;color:var(--ink)">Green Screen</span></a>
     <nav class="navlist" aria-label="Main">${navHtml}</nav>
     <div style="display:flex;flex-direction:column;gap:6px;min-height:0">
       <div class="sidehead"><span class="lbl">Open projects</span></div>
       <div class="sideprojs">${projHtml}</div>
     </div>
     <a href="#/settings" class="syncind" id="syncind"></a>
+    ${installEvt && !isStandalone() ? `<button class="toggle press installbtn" data-act="install" title="Install Green Screen as an app" style="margin-top:-18px">${I.download}<span class="lbl">Install app</span></button>` : ''}
     <button class="toggle press" data-act="toggleSide" aria-label="${U.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}" title="${U.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}">${I.collapse}<span class="lbl">Collapse</span></button>
   </aside>`;
 }
@@ -754,17 +755,24 @@ function pageTasklist() {
    ============================================================ */
 function pageDue() {
   const days = Array.from({ length: 14 }, (_, i) => addDays(i));
+  const installs = activeProjects().filter(p => p.installDate && days.includes(p.installDate) && dselOK(p));
   const all = openSteps(r => !!r.x.st.due && daysFrom(r.x.st.due) <= 13 && dselOK(r.p));
   const leavingRows = Object.keys(U.tleave).map(mk => { const [pid, k] = mk.split(':'); const p = S.projects[pid]; const x = p && getItem(p, k); return p && x && x.st.due ? { p, x, cs: curStage(p), upcoming: x.stage > curStage(p) } : null; }).filter(Boolean).filter(r => !all.some(a => a.p.id === r.p.id && a.x.key === r.x.key));
   const rows = all.concat(leavingRows);
   const sel = U.dueDay && days.includes(U.dueDay) ? U.dueDay : null;
   const strip = `<div class="strip rise" role="group" aria-label="Next 14 days">${days.map((iso, i) => {
     const d = parseISO(iso); const here = rows.filter(r => r.x.st.due === iso && !U.tleave[r.p.id + ':' + r.x.key]);
+    const inst = installs.filter(p => p.installDate === iso);
     const wk = d.getDay() === 0 || d.getDay() === 6;
-    const dots = here.length > 6 ? `<i></i><i></i><i></i><span class="sdmore">+${here.length - 3}</span>` : here.map(() => '<i></i>').join('');
-    return `<button class="scell press${i === 0 ? ' today' : ''}${wk ? ' wk' : ''}${sel === iso ? ' on' : ''}" data-act="dueDay" data-v="${iso}" aria-pressed="${sel === iso}" title="${fmtDay(iso)} · ${here.length} ${here.length === 1 ? 'step' : 'steps'} due" aria-label="${fmtDay(iso)}, ${here.length} due"><span class="sw">${i === 0 ? 'Today' : WK[d.getDay()]}</span><span class="sn">${d.getDate()}</span><span class="sdots">${dots}</span></button>`;
+    const all = inst.map(p => `<i class="sdi" style="background:${dColor(p.designer)}"></i>`).concat(here.map(() => '<i></i>'));
+    const dots = all.length > 6 ? all.slice(0, 3).join('') + `<span class="sdmore">+${all.length - 3}</span>` : all.join('');
+    const tip = [here.length ? here.length + (here.length === 1 ? ' step' : ' steps') + ' due' : '', inst.length ? 'Install: ' + inst.map(p => shortName(p.name)).join(', ') : ''].filter(Boolean).join(' · ') || 'Nothing due';
+    return `<button class="scell press${i === 0 ? ' today' : ''}${wk ? ' wk' : ''}${sel === iso ? ' on' : ''}" data-act="dueDay" data-v="${iso}" aria-pressed="${sel === iso}" title="${fmtDay(iso)} · ${esc(tip)}" aria-label="${fmtDay(iso)}, ${esc(tip)}"><span class="sw">${i === 0 ? 'Today' : WK[d.getDay()]}</span><span class="sn">${d.getDate()}</span><span class="sdots">${dots}</span></button>`;
   }).join('')}</div>`;
   const visible = sel ? rows.filter(r => r.x.st.due === sel) : rows;
+  const legend = `<div class="slegend"><span><i></i>Steps due</span><span><i class="sdi" style="background:var(--muted)"></i><i class="sdi" style="background:var(--c-sage);margin-left:-3px"></i>Install date · designer’s color</span></div>`;
+  const selInst = sel ? installs.filter(p => p.installDate === sel) : [];
+  const instLine = selInst.length ? `<div class="instline">${I.truck(14)}<span>Installing ${esc(fmtDay(sel))}:</span>${selInst.map(p => `<button class="instchip press" data-act="goOps" title="Open Operations"><span class="dot" style="width:8px;height:8px;background:${dColor(p.designer)}"></span>${esc(shortName(p.name))}${p.crew ? `<span class="muted">· ${esc(p.crew)}</span>` : ''}</button>`).join('')}</div>` : '';
   const overdueN = rows.filter(r => daysFrom(r.x.st.due) < 0 && !U.tleave[r.p.id + ':' + r.x.key]).length;
   const head = `<div class="phead"><div><div class="eyebrow">${overdueN ? overdueN + ' overdue · ' : ''}next 2 weeks</div><h1>Due Soon</h1></div>${sel ? `<button class="btn press" data-act="dueDay" data-v="">Show all</button>` : ''}</div>
     <div style="margin:-8px 0 16px">${designerPills()}</div>`;
@@ -779,7 +787,7 @@ function pageDue() {
     return `<section class="tgroup rise${open ? ' open' : ''}${id === 'over' ? ' late' : ''}" style="animation-delay:${gi * 50}ms"><button class="dhead" data-act="dgroup" data-v="${id}" aria-expanded="${open}">${I.chev()}<span style="font-size:15px;font-weight:600${id === 'over' ? ';color:var(--urgent)' : ''}">${label}</span><span class="mono" style="font-size:12px;color:var(--muted)">${cnt}</span></button>${body}</section>`;
   }).join('');
   const empty = !rows.length ? `<div class="empty rise"><h2>Nothing due in the next two weeks</h2><p>Give a step a target date and it’ll show up here, whatever stage it’s in.</p></div>` : '';
-  return head + strip + (empty || groups);
+  return head + strip + legend + instLine + (empty || groups);
 }
 
 /* ============================================================
@@ -1203,6 +1211,7 @@ function pageSettings() {
   const crows = (S.settings.crews || []).map((c, i) => { const n = cCount(c); return `<div class="crow2"><label style="min-width:0"><span class="sr">Crew leader</span><input class="tin" id="cr-${i}" value="${esc(c)}" data-scommit="crew" data-i="${i}" autocomplete="off"></label><span class="mono" style="font-size:11.5px;color:var(--muted);text-align:right">${n ? n + (n === 1 ? ' job' : ' jobs') : ''}</span><button class="ibtn del press" data-act="cdel" data-i="${i}" ${n ? 'disabled' : ''} title="${n ? 'Reassign their jobs on Operations before removing' : 'Remove ' + esc(c)}" aria-label="Remove ${esc(c)}">${I.x(14)}</button></div>`; }).join('');
   const ret = retentionDays();
   return `<div class="phead"><div><div class="eyebrow">Version ${APP_VERSION} · window ${scr}</div><h1>Settings</h1></div></div>
+  ${installCard()}
   <section class="card scard rise"><h2>Appearance</h2><p class="sub">Saved on this device.</p><div class="tcards">${tcards}</div>
     <div class="rowline"><span><span style="display:block;font-size:13.5px;font-weight:500">Motion</span><span style="font-size:12.5px;color:var(--muted)">Animations for completing steps, stages and opening folders. Off keeps everything instant.</span></span><button class="tog${U.motion ? ' on' : ''}" data-act="motion" aria-pressed="${U.motion}" aria-label="Animations"></button></div></section>
   <section class="card scard rise" style="animation-delay:40ms"><h2>Designers</h2><p class="sub">Rename in place and pick each designer’s color. A designer can be removed once they have no projects.</p>${drows}
@@ -1634,6 +1643,7 @@ document.addEventListener('click', (e) => {
     case 'theme': U.theme = v; lsSet(LS.theme, v); render(); renderToast(); break;
     case 'motion': U.motion = !U.motion; lsSet(LS.motion, U.motion); render(); break;
     case 'backup': downloadBackup(); break;
+    case 'install': doInstall(); break;
     case 'dsel': U.dsel = v; lsSet('gs5:dsel', v); render(); break;
     case 'tgroup': { const o = U.tgroups[v] !== undefined ? U.tgroups[v] : v !== 'LOW'; U.tgroups[v] = !o; render(); break; }
     case 'dgroup': { const o = U.dgroups[v] !== undefined ? U.dgroups[v] : v !== 'later'; U.dgroups[v] = !o; render(); break; }
@@ -1650,6 +1660,27 @@ document.addEventListener('click', (e) => {
   }
 });
 
+/* ---------- install as an app (PWA) ---------- */
+let installEvt = null;
+const isStandalone = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; render(); });
+window.addEventListener('appinstalled', () => { installEvt = null; showToast('Green Screen installed', false); render(); });
+function doInstall() {
+  if (!installEvt) { location.hash = '#/settings'; return; }
+  const ev = installEvt; installEvt = null;
+  ev.prompt();
+  (ev.userChoice || Promise.resolve({})).then((r) => { if (r && r.outcome !== 'accepted') installEvt = ev; render(); }).catch(() => render());
+}
+function installCard() {
+  if (isStandalone()) return '';
+  const ua = navigator.userAgent || '';
+  const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const how = ios
+    ? 'In Safari, tap the Share button, then <b>Add to Home Screen</b>.'
+    : installEvt ? 'Opens in its own window with the Green Screen icon, like any other app.'
+    : 'In Chrome, click the install icon at the right end of the address bar, or open the ⋮ menu → <b>Cast, save and share</b> → <b>Install page as app</b>. If you don’t see it, the app may already be installed: check your apps or desktop.';
+  return `<section class="card scard rise"><div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><span style="width:40px;height:40px;border-radius:10px;background:var(--accent);display:grid;place-items:center;flex:none">${I.leaf(40)}</span><span style="flex:1;min-width:220px"><h2 style="margin-bottom:2px">Install Green Screen</h2><span style="font-size:12.5px;color:var(--muted)">${how}</span></span>${installEvt && !ios ? `<button class="btn pri press" data-act="install">${I.download}Install app</button>` : ''}</div></section>`;
+}
 function downloadBackup() {
   const data = { app: 'Green Screen', version: APP_VERSION, exportedAt: new Date().toISOString(), projects: S.projects, workflow: S.workflow, settings: S.settings };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
