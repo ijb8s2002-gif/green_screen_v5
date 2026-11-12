@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.1.6';
+const APP_VERSION = '5.1.7';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -380,6 +380,7 @@ function render() {
   main.innerHTML = html;
   U.enter = false;
   if (U.route.page === 'dashboard') fitRecentRow();
+  layoutOpenBoxes();
   if (keep) {
     const el = document.getElementById(keep.id);
     if (el) { el.value = keep.v; el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} }
@@ -604,9 +605,10 @@ function stageHtml(p, si, cs, items) {
     : pending ? `<button class="btn press" data-act="complete" data-i="${si}" style="font-size:12px;padding:5px 10px">${I.tick(12, 'currentColor')}Complete stage</button>` : '';
   const head = `<div class="shead" data-act="stage" data-i="${si}" role="button" tabindex="0" aria-expanded="${open}">${I.chev()}<span class="sname">${STAGES[si]}</span>${badge}${src}<span class="mono" style="font-size:12px;color:var(--muted)">${done}/${counted.length}${optN ? ' · +' + optN + ' optional' : ''}</span><span style="margin-left:auto;display:flex;gap:8px;align-items:center" data-stop="1">${opsBtn}${actBtn}</span></div>`;
   if (!open) return `<section class="stage${si < cs ? ' isdone' : ''}">${head}</section>`;
-  const rows = list.map(x => rowHtml(p, x)).join('');
+  const cur = si === cs;
+  const rows = list.map(x => rowHtml(p, x, cur)).join('');
   const colh = `<div class="colhead prow-grid"><span></span><span>#</span><span>Step</span><span></span><span>Target date</span><span></span><span>Status</span></div>`;
-  return `<section class="stage open${si < cs ? ' isdone' : ''}">${head}<div class="sbody">${colh}${rows}
+  return `<section class="stage open${si < cs ? ' isdone' : ''}">${head}<div class="sbody">${colh}${cur ? `<div class="obwrap" data-ob="${p.id}:${si}"><div class="oboxes" aria-hidden="true"></div>${rows}</div>` : rows}
     <div style="display:flex;align-items:center;gap:10px;padding:6px 10px 2px;border-top:1px solid var(--line)"><span style="width:22px;display:grid;place-items:center;color:var(--muted)">${I.plus}</span><label style="flex:1;display:flex"><span class="sr">Add a step to ${STAGES[si]}</span><input id="add-${si}" class="addin" placeholder="Add step to this project — press Enter" data-add="${si}" autocomplete="off"></label></div>
   </div></section>`;
 }
@@ -633,7 +635,7 @@ function stepCells(p, x) {
   const status = `<div style="position:relative"><button class="chip chipbtn press chip-${SK[shown]}" data-act="menu" data-kind="st" data-key="${mk}" aria-haspopup="menu" aria-expanded="${sOpen}" aria-label="Status: ${shown}"><span class="ico ico-${SK[shown]}"></span>${shown}</button>${stMenu}</div>`;
   return { due, pri, status };
 }
-function rowHtml(p, x) {
+function rowHtml(p, x, cur) {
   const k = x.key, m = U.menu, mk = p.id + ':' + k;
   const st = x.st;
   const c = U.casc && U.casc.pid === p.id && U.casc.ids[k] !== undefined ? U.casc.ids[k] : null;
@@ -644,6 +646,7 @@ function rowHtml(p, x) {
   if (c !== null) cls += ' casc';
   if (un !== null) cls += ' unc';
   if (U.justDone === mk) cls += ' justdone';
+  if (cur && !isClosed(st.s) && c === null && !x.optional) cls += ' isopen';
   const delay = c !== null ? c * 55 : un !== null ? un * 45 : 0;
   const { due, pri, status } = stepCells(p, x);
   // title cell
@@ -844,6 +847,41 @@ function pageDashboard() {
     ${dc.r ? '' : `<div class="fgrid onerow" id="recent-row">${recent.map(p => folderHtml(p, { noActs: true })).join('')}</div>`}</section>`;
   return head + `<div style="display:flex;flex-direction:column;gap:18px">${urgCard}${opsCard}</div>` + recCard;
 }
+/* Project page: light green boxes around runs of open steps in the current stage.
+   They grow, shrink, split and merge between renders by remembering the last geometry. */
+let OB = { key: null, boxes: [] };
+function layoutOpenBoxes(instant) {
+  const wrap = document.querySelector('.obwrap');
+  if (!wrap) { OB = { key: null, boxes: [] }; return; }
+  const layer = wrap.querySelector('.oboxes');
+  const key = wrap.dataset.ob;
+  const rows = [...wrap.querySelectorAll(':scope > .step')];
+  const runs = []; let cur = null;
+  rows.forEach(r => { if (r.classList.contains('isopen')) { if (!cur) { cur = [r, r]; runs.push(cur); } else cur[1] = r; } else cur = null; });
+  const next = runs.map(([a, b]) => ({ top: a.offsetTop - 2, h: b.offsetTop + b.offsetHeight - a.offsetTop + 4 }));
+  const old = OB.key === key ? OB.boxes : [];
+  const anim = !instant && motionOK();
+  const ov = (a, b) => Math.max(0, Math.min(a.top + a.h, b.top + b.h) - Math.max(a.top, b.top));
+  const mk = (g, o) => { const el = document.createElement('div'); el.className = 'obox'; el.style.transition = 'none'; el.style.top = g.top + 'px'; el.style.height = Math.max(0, g.h) + 'px'; el.style.opacity = o; layer.appendChild(el); return el; };
+  const go = (el, g, o) => { el.style.transition = ''; el.style.top = g.top + 'px'; el.style.height = Math.max(0, g.h) + 'px'; el.style.opacity = o; };
+  const used = new Set(); const moves = [];
+  next.forEach(g => {
+    if (!anim) { mk(g, 1); return; }
+    let best = -1, bv = 0; old.forEach((o, i) => { if (used.has(i)) return; const v = ov(o, g); if (v > bv) { bv = v; best = i; } });
+    if (best >= 0) { used.add(best); moves.push([mk(old[best], 1), g, 1]); return; }
+    let src = null, sv = 0; old.forEach(o => { const v = ov(o, g); if (v > sv) { sv = v; src = o; } });
+    moves.push([src ? mk(src, 1) : mk({ top: g.top + g.h / 2, h: 0 }, 0), g, 1]);
+  });
+  if (anim) old.forEach((o, i) => {
+    if (used.has(i)) return;
+    let t = null, tv = 0; next.forEach(g => { const v = ov(o, g); if (v > tv) { tv = v; t = g; } });
+    const el = mk(o, 1); moves.push([el, t || { top: o.top + o.h / 2, h: 0 }, t ? 1 : 0]);
+    setTimeout(() => el.remove(), 420);
+  });
+  if (moves.length) { void layer.offsetHeight; moves.forEach(([el, g, o]) => go(el, g, o)); }
+  OB = { key, boxes: next };
+}
+window.addEventListener('resize', () => { if (U.route.page === 'project') { const l = document.querySelector('.oboxes'); if (l) { l.innerHTML = ''; layoutOpenBoxes(true); } } });
 function fitRecentRow() {
   const row = document.getElementById('recent-row'); if (!row) return;
   const kids = [...row.children]; if (!kids.length) return;

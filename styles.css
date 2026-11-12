@@ -257,6 +257,12 @@ h2{margin:0;font-size:15px;font-weight:600}
 .prow-grid{grid-template-columns:22px 26px minmax(0,1fr) 84px 118px 30px 128px}
 .step{display:grid;align-items:center;gap:12px;padding:6px 10px;border-radius:7px;border-top:1px solid var(--line)}
 .step:hover{background:var(--hover)}
+.obwrap{position:relative}
+.oboxes{position:absolute;inset:0 -4px;pointer-events:none}
+.obox{position:absolute;left:0;right:0;border:1.5px solid color-mix(in srgb,var(--accent) 34%,var(--progBg));background:color-mix(in srgb,var(--progBg) 75%,transparent);border-radius:10px;transition:top .34s cubic-bezier(.3,.7,.2,1),height .34s cubic-bezier(.3,.7,.2,1),opacity .28s ease}
+.obwrap>.step{position:relative}
+.obwrap>.step.isopen{border-top-color:color-mix(in srgb,var(--accent) 16%,transparent)}
+.obwrap>.step.isopen:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
 .step .tools{opacity:0;display:flex;gap:2px;justify-content:flex-end}
 .step:hover .tools,.step:focus-within .tools{opacity:1}
 .stitle{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
