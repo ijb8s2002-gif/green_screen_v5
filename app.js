@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.1.0';
+const APP_VERSION = '5.1.3';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -13,7 +13,8 @@ const PL = { LOW: 'Low', MEDIUM: 'Medium', URGENT: 'Urgent' };
 const COLORS = [['sage', 'Sage'], ['pine', 'Pine'], ['wheat', 'Wheat'], ['slate', 'Slate'], ['ochre', 'Ochre'], ['clay', 'Clay']];
 
 const T = [[0, "Schedule Consult", ""], [0, "Create SharePoint Folder", "Link to existing Pipedrive deal and save to My Files"], [0, "Aerial Drawing", "Use measurements/contours from IA County Assessor or Beacon"], [0, "Initial Consult", "Meet client, take measurements & elevations on site"], [1, "Make Layout", ""], [1, "Sketch Prelim Options", "Design w/ client program, nursery list, and applicable site observations"], [1, "CAD Drawing", ""], [1, "CAD Redline Updates", "See notes on B&W copy in SharePoint"], [1, "Estimating Notes", "Highlight design regions on latest B&W plan"], [1, "Pipedrive: Estimating Task", "Clarify materials and existing site conditions w/ Estimating Team"], [1, "Pipedrive: Rendering Task", "Build in SketchUp; talk through view details w/ Graphics Team"], [2, "Schedule Present", ""], [2, "Review Plan & Proposal", "Make necessary edits to review sheet or B&W plan"], [2, "Color Rendering", ""], [2, "Plant Photo Sheet", "Build in Canva based off current perennial schedule"], [2, "Print Present Docs", "Includes proposal, sales review sheet, warranty info, nursery price list"], [2, "Customer Materials", "Paver samples & relevant past project pictures"], [2, "Design Present", ""], [3, "Client Follow-Up", "Check in with customer on plan revisions, sales progress, install timing"], [3, "Revision Meeting", "Finalize plan details, material specs, and pricing for approved project scope"], [3, "Update Plan & Proposal", ""], [3, "Finalize Sold Project", "Receive signed proposal + 25% deposit"], [3, "File Paperwork & Deposit", "Scan proposal into SharePoint & hand off deposit to business office"], [3, "Make Placeholder", "Pending updates and processed operations"], [4, "Prep Crewplan & Crewpics", ""], [4, "Send Ops Email", "Includes locates, relevant timing, manhours, most current review sheet"], [4, "Confirm Install Timing", "Reach out to client once project is added to tentative crew schedule"], [4, "Coordinate w/ Crew Leader", "Determine upcoming crew schedule w/ Group Leader and follow up w/ client"], [4, "Check Hardscape Materials", "Talk to Purchasing/Estimating Team"], [4, "Check Plant Availability", "Talk to Ames Tagging"], [4, "Request Utility Locates", ""], [4, "Special Order Perennials", "Talk to Nursery/Procurement Team about delivery timing prior to installation"], [4, "Confirm Tagged Plants", "Check at West Site and Retail locations to compare w/ current Tagging Sheet before project start"], [5, "Meet Crew Onsite", "Walk through installation details, best access, or flagged plantings"], [5, "Site Visit", "Monitor installation progress, address issues, layout perennial plantings, or meet w/ homeowner"], [5, "Process Completed Work Order", "Compare w/ onsite installation notes and edit subbed perennials for Nursery inventory"], [5, "Client Watering Instructions", ""], [5, "Take Finished Project Photos", ""], [6, "Pipedrive: Warranty Task", "Double-check any changes to warranty plant cultivars or original size"], [6, "Process Warranty Paperwork", ""]];
-const DEFAULT_WORKFLOW = T.map(([stage, title, detail], i) => ({ id: 'w' + (i + 1), stage, title, detail, optional: stage === 6 }));
+const DEFAULT_OPTIONAL = ['w11', 'w20', 'w32'];
+const DEFAULT_WORKFLOW = T.map(([stage, title, detail], i) => ({ id: 'w' + (i + 1), stage, title, detail, optional: stage === 6 || DEFAULT_OPTIONAL.includes('w' + (i + 1)) }));
 const DEFAULT_SETTINGS = {
   designers: [{ id: 'isaiah', name: 'Isaiah Bates', color: 'sage' }, { id: 'dan', name: 'Dan Van Weelden', color: 'pine' }, { id: 'justin', name: 'Justin Wigdahl', color: 'wheat' }],
   crews: ['Ken Small', 'Brad Oxley', 'Chuck Johnson', 'Jon Goodknight', 'Curtis Carlson', 'Michael Schreck', 'Kaleb Ross', 'Marcelo Montero', 'Evan Erichsen', 'Vaughn Gibson', 'Martin Huber', 'Peter Boman', 'Rob Lechnir', 'Rick Johnson', 'Nick Breuning'],
@@ -193,6 +194,13 @@ async function initCloud() {
   authMod.onAuthStateChanged(auth, (user) => { if (user && !cloud.ready) onAuthed(); });
   authMod.signInAnonymously(auth).catch((e) => { console.error('Sign-in failed', e); if (!cloud.ready) setSync(navigator.onLine ? 'error' : 'offline', 'Could not sign in to the cloud yet.'); });
 }
+function runMigrations() {
+  const done = S.settings.migrations || [];
+  if (done.includes('opt-11-20-32')) return;
+  const wf = clone(S.workflow); wf.forEach(w => { if (DEFAULT_OPTIONAL.includes(w.id)) w.optional = true; });
+  putMeta('workflow', wf);
+  const st = clone(S.settings); st.migrations = done.concat(['opt-11-20-32']); putMeta('settings', st);
+}
 function onAuthed() {
   const fs = cloud.fs;
   cloud.ready = true;
@@ -210,6 +218,7 @@ function onAuthed() {
       if (snap.exists()) {
         const v = snap.data().v;
         S[key] = key === 'settings' ? Object.assign(clone(DEFAULT_SETTINGS), v || {}) : (v || clone(DEFAULT_WORKFLOW));
+        if (!snap.metadata.fromCache) { cloud.metaLive = cloud.metaLive || {}; cloud.metaLive[key] = true; if (cloud.metaLive.workflow && cloud.metaLive.settings && !cloud.migrated) { cloud.migrated = true; setTimeout(runMigrations, 300); } }
         saveMirror(); render();
       } else if (!snap.metadata.fromCache && !cloud.seeded[key]) {
         cloud.seeded[key] = true;
@@ -237,7 +246,8 @@ const isClosed = (s) => s === 'Done' || s === 'N/A';
 function projItems(p) {
   const out = [];
   S.workflow.forEach((w, i) => {
-    out.push({ key: w.id, kind: 't', n: i + 1, title: w.title, detail: w.detail, stage: w.stage, optional: !!w.optional, st: Object.assign({}, DEF_ST, (p.steps || {})[w.id]) });
+    const st0 = (p.steps || {})[w.id] || {};
+    out.push({ key: w.id, kind: 't', n: i + 1, title: w.title, detail: w.detail, stage: w.stage, tplOptional: !!w.optional, optional: !!w.optional && !st0.req, st: Object.assign({}, DEF_ST, (p.steps || {})[w.id]) });
   });
   (p.custom || []).forEach((c) => {
     out.push({ key: c.id, kind: 'c', n: 0, title: c.title, detail: '', stage: c.stage, optional: false, st: Object.assign({}, DEF_ST, c) });
@@ -292,7 +302,7 @@ function stageCounts(p, items) {
   return { cs, open: open.length, urgent: open.filter(x => x.st.p === 'URGENT').length, medium: open.filter(x => x.st.p === 'MEDIUM').length };
 }
 function dueBadgeCount() {
-  let n = 0; activeProjects().forEach(p => projItems(p).forEach(x => { if (!isClosed(x.st.s) && x.st.due && daysFrom(x.st.due) <= 0) n++; })); return n;
+  let n = 0; activeProjects().forEach(p => projItems(p).forEach(x => { if (!isClosed(x.st.s) && !x.optional && x.st.due && daysFrom(x.st.due) <= 0) n++; })); return n;
 }
 function newProject({ name, address, po, designerId, stage }) {
   const p = { id: uid('p'), name, address: address || '', po: po || '', designer: designerId, createdAt: Date.now(), updatedAt: Date.now(), archived: false, archivedAt: null, pinned: false, steps: {}, custom: [], crew: '', installDate: '', noArchivePrompt: false };
@@ -538,7 +548,7 @@ function pageProject() {
   const d = designer(p.designer);
   const m = U.menu;
   // header
-  const dsMenu = m && m.kind === 'ds' ? `<div class="smenu left pop-in" role="menu">${designers().map(x => `<button class="mi${x.id === p.designer ? ' cur' : ''}" role="menuitemradio" aria-checked="${x.id === p.designer}" data-act="setDesigner" data-v="${x.id}"><span class="dot" style="background:var(--c-${x.color})"></span>${esc(x.name)}</button>`).join('')}</div>` : '';
+  const dsMenu = m && m.kind === 'ds' ? `<div class="smenu left${U.menuFresh ? ' pop-in' : ''}" role="menu">${designers().map(x => `<button class="mi${x.id === p.designer ? ' cur' : ''}" role="menuitemradio" aria-checked="${x.id === p.designer}" data-act="setDesigner" data-v="${x.id}"><span class="dot" style="background:var(--c-${x.color})"></span>${esc(x.name)}</button>`).join('')}</div>` : '';
   const head = `<div class="phead" style="align-items:flex-start;margin-bottom:20px">
     <div style="flex:1;min-width:280px">
       <div class="crumb"><a href="#/${p.archived ? 'archived' : 'projects'}">${p.archived ? 'Archived' : 'Projects'}</a> <span>/</span> ${esc(p.name)}</div>
@@ -582,15 +592,16 @@ function stageHtml(p, si, cs, items) {
   const list = stageItems(p, si, items);
   const key = p.id + ':' + si;
   const open = U.open[key] !== undefined ? U.open[key] : si === cs;
-  const counted = list.filter(x => x.st.s !== 'N/A');
+  const counted = list.filter(x => x.st.s !== 'N/A' && !x.optional);
   const done = counted.filter(x => x.st.s === 'Done').length;
+  const optN = list.filter(x => x.optional && x.st.s !== 'N/A').length;
   const badge = si < cs ? '' : si === cs ? '<span class="badge cur">CURRENT</span>' : '<span class="badge up">UPCOMING</span>';
   const src = si === 5 ? '<span class="badge custom">CUSTOM STAGE</span>' : '';
   const opsBtn = (si === 4 || si === 5) ? `<button class="opslink press" data-act="goOps" title="See this stage across all jobs">${I.truck(13)}Operations ›</button>` : '';
   const pending = list.some(x => !isClosed(x.st.s));
   const actBtn = si < cs ? `<button class="btn press" data-act="reopen" data-i="${si}" style="font-size:12px;padding:5px 10px">${I.reopen}Reopen stage</button>`
     : pending ? `<button class="btn press" data-act="complete" data-i="${si}" style="font-size:12px;padding:5px 10px">${I.tick(12, 'currentColor')}Complete stage</button>` : '';
-  const head = `<div class="shead" data-act="stage" data-i="${si}" role="button" tabindex="0" aria-expanded="${open}">${I.chev()}<span class="sname">${STAGES[si]}</span>${badge}${src}<span class="mono" style="font-size:12px;color:var(--muted)">${done}/${counted.length}</span><span style="margin-left:auto;display:flex;gap:8px;align-items:center" data-stop="1">${opsBtn}${actBtn}</span></div>`;
+  const head = `<div class="shead" data-act="stage" data-i="${si}" role="button" tabindex="0" aria-expanded="${open}">${I.chev()}<span class="sname">${STAGES[si]}</span>${badge}${src}<span class="mono" style="font-size:12px;color:var(--muted)">${done}/${counted.length}${optN ? ' · +' + optN + ' optional' : ''}</span><span style="margin-left:auto;display:flex;gap:8px;align-items:center" data-stop="1">${opsBtn}${actBtn}</span></div>`;
   if (!open) return `<section class="stage${si < cs ? ' isdone' : ''}">${head}</section>`;
   const rows = list.map(x => rowHtml(p, x)).join('');
   const colh = `<div class="colhead prow-grid"><span></span><span>#</span><span>Step</span><span></span><span>Target date</span><span></span><span>Status</span></div>`;
@@ -605,19 +616,19 @@ function stepCells(p, x) {
   // due
   const hasDue = !!st.due;
   const dOpen = m && m.kind === 'due' && m.key === mk;
-  const dueMenu = dOpen ? `<div class="smenu pop-in" role="menu" style="min-width:210px"><div class="mhead">Target date</div>${quickDates().map(q => `<button class="mi" role="menuitem" data-act="setDue" data-pid="${p.id}" data-k="${k}" data-v="${q.iso}">${q.label}<span class="hint">${q.hint}</span></button>`).join('')}<label class="mpick">Pick a date<input type="date" value="${st.due}" data-change="pickDue" data-pid="${p.id}" data-k="${k}"></label>${hasDue ? `<button class="mi danger" role="menuitem" data-act="setDue" data-pid="${p.id}" data-k="${k}" data-v="">Clear date</button>` : ''}</div>` : '';
+  const dueMenu = dOpen ? `<div class="smenu${U.menuFresh ? ' pop-in' : ''}" role="menu" style="min-width:210px"><div class="mhead">Target date</div>${quickDates().map(q => `<button class="mi" role="menuitem" data-act="setDue" data-pid="${p.id}" data-k="${k}" data-v="${q.iso}">${q.label}<span class="hint">${q.hint}</span></button>`).join('')}<label class="mpick">Pick a date<input type="date" value="${st.due}" data-change="pickDue" data-pid="${p.id}" data-k="${k}"></label>${hasDue ? `<button class="mi danger" role="menuitem" data-act="setDue" data-pid="${p.id}" data-k="${k}" data-v="">Clear date</button>` : ''}</div>` : '';
   const due = `<div style="position:relative;min-width:0"><button class="duebtn press tone-${dueTone(st.due)}${hasDue ? '' : ' empty'}" data-act="menu" data-kind="due" data-key="${mk}" aria-haspopup="menu" aria-expanded="${dOpen}" title="Set target date">${I.cal}${hasDue ? esc(dueLabel(st.due)) : 'Set date'}</button>${dueMenu}</div>`;
   // priority
   const sg = suggestion(x); const sug = !!sg;
   const pOpen = m && m.kind === 'pri' && m.key === mk;
   const nextLv = LEVELS[Math.min(LEVELS.indexOf(st.p) + 1, 2)];
   const bars = (lv) => `<span class="bars lv-${lv}"><i class="on"></i><i class="${lv !== 'LOW' ? 'on' : ''}"></i><i class="${lv === 'URGENT' ? 'on' : ''}"></i></span>`;
-  const priMenu = pOpen ? `<div class="smenu pop-in" role="menu" style="min-width:190px">${sug ? `<div class="sugbox${sg.overdue ? ' late' : ''}">${esc(sg.when)}<span style="display:flex;gap:6px"><button class="sugbtn press" data-act="raise" data-pid="${p.id}" data-k="${k}">${I.arrowUp}Raise to ${PL[sg.target]}</button><button class="sugbtn plain press" data-act="dismiss" data-pid="${p.id}" data-k="${k}">Dismiss</button></span></div>` : ''}${LEVELS.map(lv => `<button class="mi${lv === st.p ? ' cur' : ''}" role="menuitemradio" aria-checked="${lv === st.p}" data-act="setPri" data-pid="${p.id}" data-k="${k}" data-v="${lv}">${bars(lv)}${PL[lv]}</button>`).join('')}</div>` : '';
+  const priMenu = pOpen ? `<div class="smenu${U.menuFresh ? ' pop-in' : ''}" role="menu" style="min-width:190px">${sug ? `<div class="sugbox${sg.overdue ? ' late' : ''}">${esc(sg.when)}<span style="display:flex;gap:6px"><button class="sugbtn press" data-act="raise" data-pid="${p.id}" data-k="${k}">${I.arrowUp}Raise to ${PL[sg.target]}</button><button class="sugbtn plain press" data-act="dismiss" data-pid="${p.id}" data-k="${k}">Dismiss</button></span></div>` : ''}${LEVELS.map(lv => `<button class="mi${lv === st.p ? ' cur' : ''}" role="menuitemradio" aria-checked="${lv === st.p}" data-act="setPri" data-pid="${p.id}" data-k="${k}" data-v="${lv}">${bars(lv)}${PL[lv]}</button>`).join('')}</div>` : '';
   const pri = `<div style="position:relative"><button class="pbtn press tile-${st.p}" data-act="menu" data-kind="pri" data-key="${mk}" aria-haspopup="menu" aria-expanded="${pOpen}" title="Priority: ${PL[st.p]}${sug ? ' — ' + (sg.overdue ? 'overdue' : 'due soon') + ', consider raising to ' + PL[sg.target] : ''}" aria-label="Priority: ${PL[st.p]}">${bars(st.p)}${sug ? `<span class="sugdot${sg.overdue ? ' late' : ''}" aria-hidden="true">${I.arrowUp}</span>` : ''}</button>${priMenu}</div>`;
   // status
   const sOpen = m && m.kind === 'st' && m.key === mk;
   const shown = c !== null ? 'Done' : st.s;
-  const stMenu = sOpen ? `<div class="smenu pop-in" role="menu" style="min-width:150px">${STATUSES.map(s => `<button class="mi${s === st.s ? ' cur' : ''}" role="menuitemradio" aria-checked="${s === st.s}" data-act="setStatus" data-pid="${p.id}" data-k="${k}" data-v="${s}"><span class="chip chip-${SK[s]}"><span class="ico ico-${SK[s]}"></span>${s}</span></button>`).join('')}</div>` : '';
+  const stMenu = sOpen ? `<div class="smenu${U.menuFresh ? ' pop-in' : ''}" role="menu" style="min-width:150px">${STATUSES.map(s => `<button class="mi${s === st.s ? ' cur' : ''}" role="menuitemradio" aria-checked="${s === st.s}" data-act="setStatus" data-pid="${p.id}" data-k="${k}" data-v="${s}"><span class="chip chip-${SK[s]}"><span class="ico ico-${SK[s]}"></span>${s}</span></button>`).join('')}</div>` : '';
   const status = `<div style="position:relative"><button class="chip chipbtn press chip-${SK[shown]}" data-act="menu" data-kind="st" data-key="${mk}" aria-haspopup="menu" aria-expanded="${sOpen}" aria-label="Status: ${shown}"><span class="ico ico-${SK[shown]}"></span>${shown}</button>${stMenu}</div>`;
   return { due, pri, status };
 }
@@ -638,7 +649,10 @@ function rowHtml(p, x) {
   const isProc = x.key === 'w25' || x.key === 'w26';
   const procBtn = isProc ? `<button class="opslink sm press" data-act="goOps"${x.key === 'w26' ? ` data-email="${p.id}"` : ''} title=""${x.key === 'w26' ? 'Write the ops email on Operations' : 'Processing step · open Operations'}">${x.key === 'w26' ? 'EMAIL ›' : 'OPS ›'}</button>` : '';
   const noteIc = st.note ? `<span class="noteic" title="Has a note">${I.note}</span>` : '';
-  const tag = x.kind === 'c' ? '<span class="ptag">THIS PROJECT</span>' : '';
+  const tag = x.kind === 'c' ? '<span class="ptag">THIS PROJECT</span>'
+    : x.tplOptional ? (x.optional
+      ? `<button class="ptag opt press" data-act="reqToggle" data-pid="${p.id}" data-k="${k}" title="Optional: hidden from the Tasklist and not counted in progress. Click to make it required for this project.">OPTIONAL</button>`
+      : `<button class="ptag req press" data-act="reqToggle" data-pid="${p.id}" data-k="${k}" title="Required for this project only. Click to make it optional again.">REQUIRED HERE</button>`) : '';
   const grip = x.kind === 'c' ? `<span class="grip cgrip" title="Drag to reorder" aria-hidden="true">${svg(14, '<circle cx="9" cy="6" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="18" r="1"></circle>', 2.4)}</span>` : '';
   const titleCell = `<span style="display:flex;align-items:center;gap:8px;min-width:0">${grip}<span class="stitle" data-act="expand" data-pid="${p.id}" data-k="${k}" title="${esc(x.title)}">${esc(x.title)}</span>${tag}${noteIc}</span>`;
   // tools
@@ -666,7 +680,7 @@ function openSteps(filter) {
   const out = [];
   activeProjects().forEach(p => {
     const items = projItems(p); const cs = curStage(p, items);
-    items.forEach(x => { if (!isClosed(x.st.s)) { const r = { p, x, cs, upcoming: x.stage > cs }; if (!filter || filter(r)) out.push(r); } });
+    items.forEach(x => { if (!isClosed(x.st.s) && !x.optional) { const r = { p, x, cs, upcoming: x.stage > cs }; if (!filter || filter(r)) out.push(r); } });
   });
   return out;
 }
@@ -796,9 +810,7 @@ function pageDashboard() {
     ${dc.u ? '' : `<div class="cbody">${urg.length ? `<div class="hscroll" style="padding:0 10px 8px"><div class="tbody">${taskHead()}${urg.map(r => taskRow(r, { idp: 'u' })).join('')}</div></div>` : `<div class="gempty" style="padding:4px 18px 18px">Nothing urgent right now.</div>`}</div>`}</section>`;
   // operations snapshot
   const jobs = opsJobs();
-  const proc = jobs.filter(p => curStage(p) === 4).filter(p => { const s = p.steps || {}; return !((s.w25 || {}).s === 'Done' && (s.w26 || {}).s === 'Done'); });
-  const installing = jobs.filter(p => curStage(p) === 5);
-  const scheduled = jobs.filter(p => curStage(p) === 4 && !proc.includes(p));
+  const { proc, now: installing, upcoming: scheduled } = opsParts();
   const sums = [[proc.length, 'to process', proc.length ? ' hot' : ''], [installing.length, 'installing now', ''], [scheduled.filter(p => p.installDate).length, 'scheduled', ''], [scheduled.filter(p => !p.installDate).length, 'not scheduled', '']];
   const procRows = proc.length ? proc.map(p => {
     const s = p.steps || {}; const d25 = (s.w25 || {}).s === 'Done', d26 = (s.w26 || {}).s === 'Done';
@@ -810,7 +822,7 @@ function pageDashboard() {
   }).join('') : `<div class="gempty" style="padding:8px 16px 12px">All sold jobs are processed.</div>`;
   const instList = installing.concat(scheduled);
   const instRows = instList.length ? instList.map(p => {
-    const now = curStage(p) === 5; const ids = opsItems(p, now ? 5 : 4);
+    const now = p.opsBucket === 'now'; const ids = opsItems(p, now ? 5 : 4);
     const done = ids.filter(x => isClosed(x.st.s)).length;
     const date = p.installDate ? installLabel(p.installDate) : (now ? 'Now' : 'Not set');
     const warn = !now && p.installDate && daysFrom(p.installDate) <= 3 && done < ids.length;
@@ -914,8 +926,11 @@ function wfIdForN(n) { return 'w' + n; }
 function opsParts() {
   const jobs = opsJobs();
   const proc = jobs.filter(p => curStage(p) === 4 && !(stepS(p, 25) === 'Done' && stepS(p, 26) === 'Done'));
-  const now = jobs.filter(p => curStage(p) === 5);
-  const upcoming = jobs.filter(p => curStage(p) === 4 && !proc.includes(p));
+  /* The two schedule sections are just for organizing: which bucket a job is in is its own setting
+     (p.opsBucket) and never checks or unchecks steps. New jobs start in Upcoming. */
+  const sched = jobs.filter(p => !proc.includes(p));
+  const now = sched.filter(p => p.opsBucket === 'now');
+  const upcoming = sched.filter(p => p.opsBucket !== 'now');
   return { jobs, proc, now, upcoming };
 }
 function soldAge(p) { const d = ((p.steps || {}).w22 || {}).doneAt; return d ? Math.max(0, -daysFrom(d)) : null; }
@@ -940,13 +955,13 @@ function pageOperations() {
       <span class="mono" style="font-size:12px;color:${age !== null && age >= 5 ? 'var(--urgent)' : 'var(--muted)'};text-align:right" title="${age === null ? 'Sold date not recorded (step 22)' : 'Sold ' + age + ' days ago'}">${age === null ? '—' : 'Sold ' + age + 'd'}</span>
     </div>`;
   }).join('') : `<div class="gempty" style="padding:6px 18px 16px">All sold jobs are processed.</div>`;
-  const procCard = `<section class="card dcard rise"><div class="dhd"><h2>Needs processing</h2><span class="mono" style="font-size:12px;color:var(--muted)">${proc.length}</span><span style="font-size:12px;color:var(--muted)">· sold jobs missing step 25 or 26</span></div>
+  const procCard = `<section class="card dcard rise"><div class="dhd"><h2>Needs processing</h2><span class="mono" style="font-size:12px;color:var(--muted)">${proc.length}</span></div>
     ${procAll.length ? `<div class="colhead ohead"><span></span><span>Job</span><span>Steps</span><span style="text-align:right">Sold</span></div>` : ''}${procRows}</section>`;
   // install schedule
   const byDate = (a, b) => (a.installDate ? daysFrom(a.installDate) : 9999) - (b.installDate ? daysFrom(b.installDate) : 9999) || a.name.localeCompare(b.name);
-  const sec = (id, title, list, sub) => `<section class="card dcard rise sched${U.odrop === id ? ' dropping' : ''}" data-dropzone="${id}" style="animation-delay:${id === 'now' ? 60 : 110}ms"><div class="dhd"><h2>${title}</h2><span class="mono" style="font-size:12px;color:var(--muted)">${list.length}</span><span style="font-size:12px;color:var(--muted)">· ${sub}</span></div>
-    ${list.length ? `<div class="colhead srow-grid"><span></span><span>Job</span><span>Install date</span><span>Crew leader</span><span>Progress</span><span></span></div>${list.slice().sort(byDate).map(p => schedRow(p, id)).join('')}` : `<div class="gempty dropzone-empty" style="padding:6px 18px 16px">${id === 'now' ? 'Nothing installing right now. Drag a job here when the crew starts.' : 'No processed jobs waiting. Jobs land here after steps 25 and 26.'}</div>`}</section>`;
-  return head + `<div style="display:flex;flex-direction:column;gap:18px">${procCard}${sec('now', 'Installing now', now, 'Project Install stage')}${sec('up', 'Upcoming', upcoming, 'drag between sections to start or pause an install')}</div>`;
+  const sec = (id, title, list, sub) => `<section class="card dcard rise sched${U.odrop === id ? ' dropping' : ''}" data-dropzone="${id}" style="animation-delay:${id === 'now' ? 60 : 110}ms"><div class="dhd"><h2>${title}</h2><span class="mono" style="font-size:12px;color:var(--muted)">${list.length}</span></div>
+    ${list.length ? `<div class="colhead srow-grid"><span></span><span>Job</span><span>Install date</span><span>Crew leader</span><span>Progress</span><span></span></div>${list.slice().sort(byDate).map(p => schedRow(p, id)).join('')}` : `<div class="gempty dropzone-empty" style="padding:6px 18px 16px">${id === 'now' ? 'Nothing installing right now. Drag a job here when the crew starts.' : 'No processed jobs waiting. Jobs land here once steps 25 and 26 are done.'}</div>`}</section>`;
+  return head + `<div style="display:flex;flex-direction:column;gap:18px">${procCard}${sec('now', 'Installing now', now, 'crew is on site')}${sec('up', 'Upcoming', upcoming, 'drag between sections to organize · doesn’t change any steps')}</div>`;
 }
 function schedRow(p, zone) {
   const isNow = zone === 'now'; const ids = opsItems(p, isNow ? 5 : 4);
@@ -956,28 +971,26 @@ function schedRow(p, zone) {
   const dOpen = m && m.kind === 'idate' && m.key === p.id;
   const dow = today0().getDay(); const fri = ((5 - dow + 7) % 7) || 7; const mon = ((1 - dow + 7) % 7) || 7;
   const quick = [['Today', 0], ['Tomorrow', 1], ['By Friday', fri], ['Next Monday', mon], ['Monday after', mon + 7]];
-  const dMenu = dOpen ? `<div class="smenu pop-in" role="menu" style="min-width:210px;left:0;right:auto"><div class="mhead">Install date</div>${quick.map(([l, n]) => { const iso = addDays(n); const d = parseISO(iso); return `<button class="mi" data-act="setInstall" data-pid="${p.id}" data-v="${iso}">${l}<span class="hint">${MO[d.getMonth()]} ${d.getDate()}</span></button>`; }).join('')}<label class="mpick">Pick a date<input type="date" value="${p.installDate || ''}" data-change="pickInstall" data-pid="${p.id}"></label>${p.installDate ? `<button class="mi danger" data-act="setInstall" data-pid="${p.id}" data-v="">Clear date</button>` : ''}</div>` : '';
+  const dMenu = dOpen ? `<div class="smenu${U.menuFresh ? ' pop-in' : ''}" role="menu" style="min-width:210px;left:0;right:auto"><div class="mhead">Install date</div>${quick.map(([l, n]) => { const iso = addDays(n); const d = parseISO(iso); return `<button class="mi" data-act="setInstall" data-pid="${p.id}" data-v="${iso}">${l}<span class="hint">${MO[d.getMonth()]} ${d.getDate()}</span></button>`; }).join('')}<label class="mpick">Pick a date<input type="date" value="${p.installDate || ''}" data-change="pickInstall" data-pid="${p.id}"></label>${p.installDate ? `<button class="mi danger" data-act="setInstall" data-pid="${p.id}" data-v="">Clear date</button>` : ''}</div>` : '';
   const crews = (S.settings.crews || []).slice().sort((a, b) => a.localeCompare(b));
   const pOpen = m && m.kind === 'prog' && m.key === p.id;
-  const pop = pOpen ? `<div class="smenu pop-in progpop" role="dialog" aria-label="${isNow ? 'Install' : 'Pre-install'} checklist"><div class="mhead">${isNow ? 'Install' : 'Pre-install'} · ${esc(shortName(p.name))}</div>${ids.map(x => { const s = x.st.s; const ok = isClosed(s); return `<button class="mi pchk${ok ? ' on' : ''}" data-act="progStep" data-pid="${p.id}" data-k="${x.key}"><span class="bx">${I.tick(9)}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis${s === 'N/A' ? ';opacity:.6' : ''}">${esc(x.title)}</span><span class="hint">${s === 'N/A' ? 'N/A' : (x.n || '')}</span></button>`; }).join('')}<a class="mi" href="#/project/${p.id}" style="text-decoration:none;color:var(--accent);font-weight:500;border-top:1px solid var(--line);margin-top:4px;border-radius:0 0 7px 7px">Open project ›</a></div>` : '';
+  const pop = pOpen ? `<div class="smenu progpop${U.menuFresh ? ' pop-in' : ''}" role="dialog" aria-label="${isNow ? 'Install' : 'Pre-install'} checklist"><div class="mhead">${isNow ? 'Install' : 'Pre-install'} · ${esc(shortName(p.name))}</div>${ids.map(x => { const s = x.st.s; const ok = isClosed(s); return `<button class="mi pchk${ok ? ' on' : ''}" data-act="progStep" data-pid="${p.id}" data-k="${x.key}"><span class="bx">${I.tick(9)}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis${s === 'N/A' ? ';opacity:.6' : ''}">${esc(x.title)}</span><span class="hint">${s === 'N/A' ? 'N/A' : (x.n || '')}</span></button>`; }).join('')}<a class="mi" href="#/project/${p.id}" style="text-decoration:none;color:var(--accent);font-weight:500;border-top:1px solid var(--line);margin-top:4px;border-radius:0 0 7px 7px">Open project ›</a></div>` : '';
   return `<div class="step srow srow-grid${U.odrag === p.id ? ' dragging' : ''}" data-opid="${p.id}" data-zone="${zone}" draggable="true">
     <span class="grip" title="Drag to the other section" aria-hidden="true">${svg(14, '<circle cx="9" cy="6" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="18" r="1"></circle>', 2.4)}</span>
     <span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="dot" style="width:7px;height:7px;background:${dColor(p.designer)}"></span><a href="#/project/${p.id}" class="clink" title="${esc(p.name)}">${esc(shortName(p.name))}</a>${isNow ? '<span class="nowtag">NOW</span>' : ''}</span>
     <div style="position:relative;min-width:0"><button class="duebtn press tone-${warn ? 'urgent' : p.installDate ? 'ink' : 'muted'}" data-act="menu" data-kind="idate" data-key="${p.id}" aria-haspopup="menu" aria-expanded="${dOpen}">${I.cal}${p.installDate ? esc(installLabel(p.installDate)) : 'Set date'}</button>${dMenu}</div>
     <label style="min-width:0"><span class="sr">Crew leader for ${esc(p.name)}</span><select class="sel crewsel" data-change="crew" data-pid="${p.id}"><option value="">Assign crew leader…</option>${crews.map(c => `<option value="${esc(c)}"${p.crew === c ? ' selected' : ''}>${esc(c)}</option>`).join('')}${p.crew && !crews.includes(p.crew) ? `<option value="${esc(p.crew)}" selected>${esc(p.crew)}</option>` : ''}</select></label>
     <div style="position:relative"><button class="progbtn press${done === ids.length ? ' done' : warn ? ' warn' : ''}" data-act="menu" data-kind="prog" data-key="${p.id}" aria-haspopup="dialog" aria-expanded="${pOpen}" title="${warn ? 'Install is within 3 days and pre-install isn’t finished' : 'Open checklist'}"><span class="pbar2"><i style="width:${Math.round(done / ids.length * 100)}%"></i></span><span class="pnum">${done}/${ids.length}</span><span>${isNow ? 'Install' : 'Pre-install'}</span></button>${pop}</div>
-    <button class="ibtn press" data-act="${isNow ? 'pauseInstall' : 'startInstall'}" data-pid="${p.id}" title="${isNow ? 'Move back to Upcoming' : 'Start install (move to Installing now)'}" aria-label="${isNow ? 'Move back to Upcoming' : 'Start install'}">${isNow ? svg(14, '<path d="M12 5v14M6 13l6 6 6-6"></path>', 2) : svg(14, '<path d="M12 19V5M6 11l6-6 6 6"></path>', 2)}</button>
+    <button class="ibtn press" data-act="${isNow ? 'pauseInstall' : 'startInstall'}" data-pid="${p.id}" title="${isNow ? 'Move back to Upcoming' : 'Move to Installing now'}" aria-label="${isNow ? 'Move back to Upcoming' : 'Start install'}">${isNow ? svg(14, '<path d="M12 5v14M6 13l6 6 6-6"></path>', 2) : svg(14, '<path d="M12 19V5M6 11l6-6 6 6"></path>', 2)}</button>
   </div>`;
 }
 function startInstall(pid) {
   const p = S.projects[pid]; if (!p) return;
-  const keys = ['w25', 'w26'].concat(opsItems(p, 4).map(x => x.key));
-  mutate(pid, q => { keys.forEach(id => { const x = getItem(q, id); if (x && x.st.s !== 'N/A') setItem(q, id, { s: 'Done', doneAt: todayISO() }); }); if (!q.installDate) q.installDate = todayISO(); q.noArchivePrompt = false; }, shortName(p.name) + ' is installing now');
+  mutate(pid, q => { q.opsBucket = 'now'; if (!q.installDate) q.installDate = todayISO(); }, shortName(p.name) + ' moved to Installing now');
 }
 function pauseInstall(pid) {
   const p = S.projects[pid]; if (!p) return;
-  const keys = opsItems(p, 4).concat(opsItems(p, 5)).map(x => x.key);
-  mutate(pid, q => { keys.forEach(id => { const x = getItem(q, id); if (x && x.st.s === 'Done') setItem(q, id, { s: 'Not Started', doneAt: '' }); }); }, shortName(p.name) + ' moved back to Upcoming');
+  mutate(pid, q => { q.opsBucket = 'up'; }, shortName(p.name) + ' moved back to Upcoming');
 }
 function procBothAnim(pid) {
   const p = S.projects[pid]; if (!p || U.oleave[pid]) return;
@@ -1180,7 +1193,7 @@ function pageSettings() {
   const m = U.menu;
   const drows = designers().map(d => {
     const n = dCount(d.id); const open = m && m.kind === 'dcolor' && m.key === d.id;
-    return `<div class="drow2"><div style="position:relative"><button class="swbtn press" data-act="menu" data-kind="dcolor" data-key="${d.id}" title="Change color" aria-haspopup="menu" aria-expanded="${open}" style="background:var(--c-${d.color})"></button>${open ? `<div class="smenu left pop-in" role="menu" style="min-width:160px">${COLORS.map(([c, l]) => `<button class="mi${c === d.color ? ' cur' : ''}" data-act="dsetColor" data-id="${d.id}" data-v="${c}"><span class="dot" style="width:12px;height:12px;background:var(--c-${c})"></span>${l}</button>`).join('')}</div>` : ''}</div>
+    return `<div class="drow2"><div style="position:relative"><button class="swbtn press" data-act="menu" data-kind="dcolor" data-key="${d.id}" title="Change color" aria-haspopup="menu" aria-expanded="${open}" style="background:var(--c-${d.color})"></button>${open ? `<div class="smenu left${U.menuFresh ? ' pop-in' : ''}" role="menu" style="min-width:160px">${COLORS.map(([c, l]) => `<button class="mi${c === d.color ? ' cur' : ''}" data-act="dsetColor" data-id="${d.id}" data-v="${c}"><span class="dot" style="width:12px;height:12px;background:var(--c-${c})"></span>${l}</button>`).join('')}</div>` : ''}</div>
       <label style="min-width:0"><span class="sr">Designer name</span><input class="tin" id="dn-${d.id}" value="${esc(d.name)}" data-scommit="dname" data-id="${d.id}" autocomplete="off"></label>
       <span class="mono" style="font-size:12px;color:var(--muted);text-align:right">${n} ${n === 1 ? 'project' : 'projects'}</span>
       <button class="ibtn del press" data-act="ddel" data-id="${d.id}" ${n ? 'disabled' : ''} title="${n ? 'Reassign their projects before removing' : 'Remove ' + esc(d.name)}" aria-label="Remove ${esc(d.name)}">${I.x(14)}</button></div>`;
@@ -1577,7 +1590,7 @@ document.addEventListener('click', (e) => {
     case 'openProject': openFolder(a); break;
     case 'archiveFolder': removeFolder(a.dataset.id, 'arch'); break;
     case 'deleteFolder': removeFolder(a.dataset.id, 'gone'); break;
-    case 'menu': { const m = { kind: a.dataset.kind, key: a.dataset.key }; U.menu = U.menu && U.menu.kind === m.kind && U.menu.key === m.key ? null : m; render(); break; }
+    case 'menu': { const m = { kind: a.dataset.kind, key: a.dataset.key }; U.menu = U.menu && U.menu.kind === m.kind && U.menu.key === m.key ? null : m; U.menuFresh = !!U.menu; render(); U.menuFresh = false; break; }
     case 'setDesigner': closeMenu(); if (p && p.designer !== v) mutate(p.id, q => { q.designer = v; }, 'Designer changed to ' + designer(v).name); else render(); break;
     case 'toggle': toggleStep(k, p); break;
     case 'setStatus': closeMenu(); if (p && v === 'Done' && U.route.page !== 'project') { listComplete(p.id, k); break; } if (p) { const x = getItem(p, k); const before = curStage(p); if (x && x.st.s !== v) { mutate(p.id, q => setItem(q, k, { s: v, doneAt: v === 'Done' ? todayISO() : '' }), '“' + x.title + '” · ' + v); const after = curStage(S.projects[p.id]); if (after !== before) { U.open[p.id + ':' + after] = true; render(); } } else render(); } break;
@@ -1598,6 +1611,7 @@ document.addEventListener('click', (e) => {
     case 'deleteProject': deleteCurrent(); break;
     case 'goOps': go(a.dataset.email ? '#/operations/' + a.dataset.email : '#/operations', { exit: true }); break;
     case 'navx': go(v, { exit: true }); break;
+    case 'reqToggle': if (p) { const x = getItem(p, k); if (x) { const makeReq = x.optional; mutate(p.id, q => setItem(q, k, { req: makeReq }), '“' + x.title + '” ' + (makeReq ? 'is now required for ' + shortName(p.name) + ' · shows on the Tasklist' : 'is optional again for ' + shortName(p.name))); } } break;
     case 'procBothAnim': procBothAnim(a.dataset.pid); break;
     case 'openEmail': openEmail(a.dataset.pid); break;
     case 'setInstall': closeMenu(); if (p) mutate(p.id, q => { q.installDate = v; }, v ? shortName(p.name) + ' · install ' + installLabel(v) : shortName(p.name) + ' · install date cleared'); break;
@@ -1675,6 +1689,6 @@ U.route = parseRoute();
 render();
 renderToast();
 initCloud();
-if (LOCAL_ONLY) setTimeout(purgeArchive, 800);
+if (LOCAL_ONLY) { setTimeout(purgeArchive, 800); setTimeout(runMigrations, 400); }
 maybeOpenEmailFromRoute();
 window.GS = { S, U, render, putProject, version: APP_VERSION };
