@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.4.0';
+const APP_VERSION = '5.4.1';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -759,7 +759,7 @@ function tagOptions(p) {
   const q = tagSlug(U.tagQ || ''); const lib = tagLib(); const have = p.tags || [];
   const opts = lib.filter(t => !have.includes(t) && (!q || t.includes(q)))
     .sort((a, b) => (q ? (b.startsWith(q) ? 1 : 0) - (a.startsWith(q) ? 1 : 0) : 0) || tagCount(b) - tagCount(a) || a.localeCompare(b))
-    .slice(0, 8).map(t => ({ t, n: tagCount(t) }));
+    .map(t => ({ t, n: tagCount(t) }));
   if (q && !lib.includes(q)) opts.push({ t: q, create: true });
   return opts;
 }
@@ -771,7 +771,7 @@ function tagLine(p) {
     const q = tagSlug(U.tagQ || '');
     menu = `<div class="smenu tagmenu${U.menuFresh ? ' pop-in' : ''}" role="menu">
       <input id="tag-in" class="tagin" placeholder="Find or create a tag" value="${esc(U.tagQ || '')}" data-input="tagq" data-tagin="${p.id}" autocomplete="off" spellcheck="false" aria-label="Find or create a tag">
-      ${opts.map((o, i) => `<button class="mi${i === hi ? ' hi' : ''}" data-act="tagAdd" data-v="${esc(o.t)}" role="menuitem">${o.create ? `<span>Create <b>#${esc(o.t)}</b></span>` : `<span><span class="hash">#</span>${esc(o.t)}</span><span class="hint mono">${o.n}</span>`}</button>`).join('')}
+      <div class="tagopts" id="tagopts">${opts.map((o, i) => `<button class="mi${i === hi ? ' hi' : ''}" data-act="tagAdd" data-v="${esc(o.t)}" role="menuitem">${o.create ? `<span>Create <b>#${esc(o.t)}</b></span>` : `<span><span class="hash">#</span>${esc(o.t)}</span><span class="hint mono">${o.n}</span>`}</button>`).join('')}</div>
       ${!opts.length ? `<div class="tagnone">${q && (p.tags || []).includes(q) ? 'Already tagged #' + esc(q) : 'Type to find or create a tag'}</div>` : ''}
     </div>`;
   }
@@ -1869,7 +1869,7 @@ document.addEventListener('keydown', (e) => {
   if (t.dataset && t.dataset.scommit && (e.key === 'Enter' || e.key === 'Escape')) { if (e.key === 'Escape') { t.value = t.dataset.scommit === 'tag' ? tagLib()[Number(t.dataset.i)] : t.dataset.scommit === 'crew' ? S.settings.crews[Number(t.dataset.i)] : designer(t.dataset.id).name; } e.preventDefault(); t.blur(); return; }
   if (t.dataset && t.dataset.tagin) {
     const p = S.projects[t.dataset.tagin]; const opts = p ? tagOptions(p) : [];
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); U.tagHi = Math.max(0, Math.min(opts.length - 1, (U.tagHi || 0) + (e.key === 'ArrowDown' ? 1 : -1))); render(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); U.tagHi = Math.max(0, Math.min(opts.length - 1, (U.tagHi || 0) + (e.key === 'ArrowDown' ? 1 : -1))); const box = document.getElementById('tagopts'); const keep = box ? box.scrollTop : 0; render(); const nb = document.getElementById('tagopts'); if (nb) { nb.scrollTop = keep; const h = nb.querySelector('.mi.hi'); if (h) h.scrollIntoView({ block: 'nearest' }); } return; }
     if (e.key === 'Enter') { e.preventDefault(); const o = opts[Math.min(U.tagHi || 0, opts.length - 1)]; if (o) tagAdd(p.id, o.t); return; }
     if (e.key === 'Escape') { e.preventDefault(); U.tagQ = ''; closeMenu(); return; }
   }
