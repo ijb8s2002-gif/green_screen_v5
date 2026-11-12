@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.2.0';
+const APP_VERSION = '5.2.2';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -402,7 +402,6 @@ function render() {
   let keep = null;
   if (a && a.id && /^(INPUT|TEXTAREA)$/.test(a.tagName) && app.contains(a)) keep = { id: a.id, v: a.value, s: a.selectionStart, e: a.selectionEnd };
   const oldRow = document.getElementById('segrow');
-  const oldSeg = oldRow ? { pid: oldRow.dataset.pid, cls: [...oldRow.children].map(b => b.className.replace(/\bpv\b/g, '').trim()) } : null;
   const root = app.firstElementChild;
   if (!root || !root.classList.contains('gs-root')) {
     app.innerHTML = `<div class="gs-root"><aside class="side"></aside><main class="main"></main></div><div id="overlay"></div><div id="toastbox"></div><div id="updbox"></div>`;
@@ -418,6 +417,8 @@ function render() {
   U.enter = false;
   if (U.route.page === 'dashboard') fitRecentRow();
   layoutOpenBoxes();
+  keepStageBar(oldRow);
+  POPPED.clear(); POPPED_NOW.forEach(k => POPPED.add(k)); POPPED_NOW = new Set();
   if (keep) {
     const el = document.getElementById(keep.id);
     if (el) { el.value = keep.v; el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} }
@@ -425,21 +426,22 @@ function render() {
   renderSync();
   const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute('content', getComputedStyle(r).getPropertyValue('--bg').trim() || '#F2ECE1');
 }
-function animateStageBar(old) {
+/* Stage bar: the same bar elements are kept between renders and only their classes change,
+   so every segment (any number of stages) fills or empties with the same quick transition,
+   and a second render in the same moment can't cut a fill short. */
+function keepStageBar(oldRow) {
   const row = document.getElementById('segrow');
-  if (!row || !old || old.pid !== row.dataset.pid || !motionOK()) return;
-  const btns = [...row.children];
-  const finals = btns.map(b => b.className);
-  const rank = (c) => /seg-on/.test(c) ? 2 : /seg-now/.test(c) ? 1 : 0;
-  const changed = btns.map((b, j) => old.cls[j] !== undefined && old.cls[j] !== finals[j]);
-  if (!changed.some(Boolean)) return;
-  const forward = finals.reduce((n, c) => n + rank(c), 0) >= old.cls.reduce((n, c) => n + rank(c), 0);
-  btns.forEach((b, j) => { if (changed[j]) { b.className = old.cls[j]; b.style.setProperty('--d', '0ms'); } });
-  void row.offsetWidth; // lock in the old state, then glide to the new one
-  const idx = btns.map((_, j) => j).filter(j => changed[j]);
-  const order = forward ? idx : idx.slice().reverse();
-  order.forEach((j, n) => { btns[j].style.setProperty('--d', (n * 120) + 'ms'); btns[j].className = finals[j]; });
-  setTimeout(() => btns.forEach(b => b.style.removeProperty('--d')), order.length * 120 + 700);
+  if (!row || !oldRow || oldRow === row || oldRow.dataset.pid !== row.dataset.pid || oldRow.children.length !== row.children.length) return;
+  const fresh = [...row.children].map(nb => ({ cls: nb.className.replace(/\bpv\b/g, '').trim(), attrs: [...nb.attributes].filter(at => at.name !== 'class').map(at => [at.name, at.value]), html: nb.innerHTML }));
+  row.replaceWith(oldRow);
+  [...oldRow.children].forEach(ob => { const i = ob.querySelector('.segtrack i'); if (i) getComputedStyle(i).transform; });
+  void oldRow.offsetWidth; // lock in the current look, then switch to the new state
+  fresh.forEach((f, j) => {
+    const ob = oldRow.children[j];
+    if (ob.innerHTML !== f.html) ob.innerHTML = f.html;
+    f.attrs.forEach(([k, v]) => { if (ob.getAttribute(k) !== v) ob.setAttribute(k, v); });
+    ob.className = f.cls;
+  });
 }
 function renderSide() {
   const pg = U.route.page;
@@ -576,6 +578,9 @@ function folderHtml(p, opts = {}) {
 /* ============================================================
    PAGE — Project
    ============================================================ */
+/* true only the first render a banner appears, so it doesn't replay its pop-in on every click */
+const POPPED = new Set(); let POPPED_NOW = new Set();
+function popOnce(key) { POPPED_NOW.add(key); return !POPPED.has(key); }
 function pageProject() {
   const p = S.projects[U.route.id];
   if (!p) {
@@ -603,8 +608,11 @@ function pageProject() {
       <button class="btn del press" data-act="deleteProject" title="Delete project">${I.trash()}Delete</button>
     </div></div>`;
   const askArchive = cs >= ST_BACK && !p.noArchivePrompt && !U.gone && !p.archived;
-  const archNote = p.archived ? `<div class="archbar pop-in" role="status" style="background:var(--kraft)"><span class="dico" style="background:var(--muted)">${I.box(12)}</span><span><span style="color:var(--ink);font-weight:500">This project is archived.</span> ${p.pinned ? 'It’s pinned, so it’s kept.' : daysLeft(p) === null ? '' : 'It deletes in ' + Math.max(0, daysLeft(p)) + (daysLeft(p) === 1 ? ' day' : ' days') + ' unless you pin or restore it.'}</span><span style="margin-left:auto"><button class="btn pri press" data-act="restoreHere" style="font-size:13px;padding:7px 12px">Restore to Projects</button></span></div>` : '';
-  const archBar = askArchive ? `<div class="archbar pop-in" role="status"><span class="dico">${I.tick(12)}</span><span><span style="color:var(--ink);font-weight:500">Project Install is complete.</span> Archive this project? Backorder and warranty steps stay open if you keep it.</span><span style="margin-left:auto;display:flex;gap:6px"><button class="btn pri press" data-act="archiveProject" style="font-size:13px;padding:7px 12px">${I.box(14)}Archive project</button><button class="btn press" data-act="notNow">Not now</button></span></div>` : '';
+  const archNote = p.archived ? `<div class="archbar${popOnce('arch:' + p.id) ? ' pop-in' : ''}" role="status" style="background:var(--kraft)"><span class="dico" style="background:var(--muted)">${I.box(12)}</span><span><span style="color:var(--ink);font-weight:500">This project is archived.</span> ${p.pinned ? 'It’s pinned, so it’s kept.' : daysLeft(p) === null ? '' : 'It deletes in ' + Math.max(0, daysLeft(p)) + (daysLeft(p) === 1 ? ' day' : ' days') + ' unless you pin or restore it.'}</span><span style="margin-left:auto"><button class="btn pri press" data-act="restoreHere" style="font-size:13px;padding:7px 12px">Restore to Projects</button></span></div>` : '';
+  /* Archive prompt: a quiet line inside the stage card header (same height as the step count it sits beside),
+     so nothing on the page moves when it appears. It fades in gently the first time only. */
+  const archAsk = askArchive ? `<span class="archask${popOnce('ask:' + p.id) ? ' fadein' : ''}" role="status" title="Backorder and warranty steps stay open if you keep it"><span class="dico">${I.tick(10)}</span><span><span style="color:var(--ink);font-weight:500">Install complete.</span> Archive this project?</span><button class="btn pri press sm" data-act="archiveProject">${I.box(13)}Archive</button><button class="btn press sm" data-act="notNow">Not now</button></span>` : '';
+  const archBar = '';
   // stage bar
   const hold = U.segHold && U.segHold.pid === p.id ? U.segHold.i : null;
   const vcs = hold !== null ? hold : cs;
@@ -614,7 +622,7 @@ function pageProject() {
     const title = i === cs ? name + ' — current stage' : 'Open to ' + name + (i > cs ? ' (marks earlier stages done)' : ' (reopens it and later stages)');
     return `<button class="segbtn ${cls}${anim}" data-act="seg" data-i="${i}" data-seg="${i}" title="${esc(title)}" aria-label="${esc(title)}"><span class="segtrack"><i></i></span><span class="segname">${name}</span></button>`;
   }).join('');
-  const stageCard = `<div class="card stagecard rise" data-cs="${cs}"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px"><span style="font-size:13px;color:var(--muted)">Stage · <span style="color:var(--ink);font-weight:500">${STAGES[cs]}</span></span><span class="mono" style="font-size:12px;color:var(--muted)">${pr.done} of ${pr.total} steps</span></div><div class="segrow" id="segrow" data-pid="${p.id}">${segs}</div></div>`;
+  const stageCard = `<div class="card stagecard rise" data-cs="${cs}"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;min-height:28px;margin-bottom:8px"><span style="font-size:13px;color:var(--muted)">Stage · <span style="color:var(--ink);font-weight:500">${STAGES[cs]}</span></span><span style="display:flex;align-items:center;gap:14px">${archAsk}<span class="mono" style="font-size:12px;color:var(--muted)">${pr.done} of ${pr.total} steps</span></span></div><div class="segrow" id="segrow" data-pid="${p.id}">${segs}</div></div>`;
   // completed bar
   let doneBar = '';
   if (cs > 0) {
@@ -1471,6 +1479,10 @@ function reopenFrom(idx) {
   const p = curP(); if (!p || U.casc) return;
   const items = projItems(p); const cs = curStage(p, items);
   const toReset = items.filter(x => x.stage >= idx && x.st.s === 'Done');
+  /* "Open to this stage" must make it current: if every step that would hold it open is N/A
+     (e.g. Backorders marked "None needed"), reopen those N/A steps too. */
+  const holds = (x) => x.stage === idx && (idx >= ST_BACK || !x.optional);
+  if (!items.some(x => holds(x) && (!isClosed(x.st.s) || x.st.s === 'Done'))) toReset.push(...items.filter(x => holds(x) && x.st.s === 'N/A'));
   const inStage = toReset.filter(x => x.stage === idx);
   const ids = {}; inStage.forEach((x, i) => { ids[x.key] = inStage.length - 1 - i; });
   Object.keys(U.open).forEach(k => { if (k.startsWith(p.id + ':')) delete U.open[k]; });

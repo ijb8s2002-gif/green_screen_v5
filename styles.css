@@ -136,6 +136,11 @@ h2{margin:0;font-size:15px;font-weight:600}
 .lv-LOW i.on{background:var(--muted)}
 .lv-MEDIUM i.on{background:var(--medium)}
 .lv-URGENT i.on{background:var(--urgent)}
+.obwrap>.step.isopen .pbtn{--lv:var(--low);background:color-mix(in srgb,var(--lv) 12%,var(--panel));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--lv) 45%,transparent)}
+.obwrap>.step.isopen .pbtn.tile-MEDIUM{--lv:var(--medium)}.obwrap>.step.isopen .pbtn.tile-URGENT{--lv:var(--urgent)}
+.obwrap>.step.isopen .pbtn:hover{background:color-mix(in srgb,var(--lv) 20%,var(--panel))}
+.obwrap>.step.isopen .bars i{background:color-mix(in srgb,var(--lv) 28%,var(--panel))}
+.obwrap>.step.isopen .bars i.on{background:var(--lv)}
 .tile-LOW{background:var(--lowBg)}.tile-MEDIUM{background:var(--mediumBg)}.tile-URGENT{background:var(--urgentBg)}
 .sugdot{position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:99px;background:var(--medium);color:var(--bg);display:grid;place-items:center;animation:nudge 1.6s ease-in-out infinite;box-shadow:0 0 0 2px var(--panel)}
 @keyframes nudge{0%,100%{transform:translateY(1px)}50%{transform:translateY(-1px)}}
@@ -224,6 +229,11 @@ h2{margin:0;font-size:15px;font-weight:600}
 .hname{font-size:30px;font-weight:600;letter-spacing:-.025em;padding:0 6px;margin:0 -6px;width:100%;max-width:720px}
 .hmeta{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:8px;font-size:13px;color:var(--muted)}
 .archbar,.gonebar{display:flex;align-items:center;gap:12px;padding:11px 14px;margin-bottom:14px;border-radius:12px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);font-size:13px;color:var(--muted)}
+.archask{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+.archask .dico{width:18px;height:18px;border-radius:99px;background:var(--accent);color:var(--accentInk);display:grid;place-items:center;flex:none}
+.archask .btn.sm{font-size:12px;padding:4px 10px;gap:5px}
+.archask.fadein{animation:softin .45s ease both}
+@keyframes softin{from{opacity:0;transform:translateY(-3px)}}
 .archbar .dico{width:22px;height:22px;border-radius:99px;background:var(--accent);color:var(--accentInk);display:grid;place-items:center;flex:none}
 .stagecard{padding:16px 18px;margin-bottom:22px}
 .segrow{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
