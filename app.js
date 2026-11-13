@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.4.2';
+const APP_VERSION = '5.4.3';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -709,7 +709,7 @@ function stepCells(p, x) {
   // due
   const hasDue = !!st.due;
   const dOpen = m && m.kind === 'due' && m.key === mk;
-  const dueMenu = dOpen ? `<div class="smenu${U.menuFresh ? ' pop-in' : ''}" role="menu" style="min-width:210px"><div class="mhead">Target date</div>${quickDates().map(q => `<button class="mi" role="menuitem" data-act="setDue" data-pid="${p.id}" data-k="${k}" data-v="${q.iso}">${q.label}<span class="hint">${q.hint}</span></button>`).join('')}<label class="mpick">Pick a date<input type="date" value="${st.due}" data-change="pickDue" data-pid="${p.id}" data-k="${k}"></label>${hasDue ? `<button class="mi danger" role="menuitem" data-act="setDue" data-pid="${p.id}" data-k="${k}" data-v="">Clear date</button>` : ''}</div>` : '';
+  const dueMenu = dOpen ? `<div class="smenu${U.menuFresh ? ' pop-in' : ''}" role="menu" style="min-width:210px"><div class="mhead">Target date</div>${quickDates().map(q => `<button class="mi" role="menuitem" data-act="setDue" data-pid="${p.id}" data-k="${k}" data-v="${q.iso}">${q.label}<span class="hint">${q.hint}</span></button>`).join('')}${calBlock(st.due, `data-act="setDue" data-pid="${p.id}" data-k="${k}"`)}${hasDue ? `<button class="mi danger" role="menuitem" data-act="setDue" data-pid="${p.id}" data-k="${k}" data-v="">Clear date</button>` : ''}</div>` : '';
   const due = `<div style="position:relative;min-width:0"><button class="duebtn press tone-${dueTone(st.due)}${hasDue ? '' : ' empty'}" data-act="menu" data-kind="due" data-key="${mk}" aria-haspopup="menu" aria-expanded="${dOpen}" title="Set target date">${I.cal}${hasDue ? esc(dueLabel(st.due)) : 'Set date'}</button>${dueMenu}</div>`;
   // priority
   const sg = suggestion(x); const sug = !!sg;
@@ -834,6 +834,27 @@ function tagRemove(t) {
   const s2 = clone(S.settings); s2.tags = s2.tags.filter(x => x !== t); putMeta('settings', s2);
   touched.forEach(p => { const q = clone(p); q.tags = q.tags.filter(x => x !== t); putProject(q, { keepTime: true }); });
   pushUndo('#' + t + ' removed' + (touched.length ? ' from ' + touched.length + (touched.length === 1 ? ' project' : ' projects') : ''), () => { putMeta('settings', beforeS); touched.forEach(p => putProject(p, { keepTime: true })); });
+}
+
+/* App-style month calendar, unfolding inside the date menus ("Pick a date").
+   Day buttons reuse the menu's own action (setDue / setInstall), so picking works exactly like the quick options. */
+function calBlock(sel, attrs) {
+  if (!U.calOpen) return `<button class="mi mpick2" data-act="calOpen">Pick a date<span class="hint" style="display:flex">${svg(12, '<path d="M9 6l6 6-6 6"></path>', 2.2)}</span></button>`;
+  const t0 = today0(); const sd = sel ? parseISO(sel) : null;
+  const v = U.cal || { y: (sd || t0).getFullYear(), m: (sd || t0).getMonth() };
+  const first = new Date(v.y, v.m, 1); const start = new Date(first); start.setDate(1 - first.getDay());
+  const tIso = isoOf(t0); let cells = '';
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i); const iso = isoOf(d);
+    if (i >= 35 && d.getMonth() !== v.m) break;
+    const out = d.getMonth() !== v.m, we = d.getDay() === 0 || d.getDay() === 6;
+    cells += `<button class="cday${out ? ' out' : ''}${we ? ' we' : ''}${iso === tIso ? ' today' : ''}${iso === sel ? ' sel' : ''}" ${attrs} data-v="${iso}" aria-label="${WK[d.getDay()]}, ${MO[d.getMonth()]} ${d.getDate()}"${iso === sel ? ' aria-pressed="true"' : ''}>${d.getDate()}</button>`;
+  }
+  const MF = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  return `<div class="cal" role="group" aria-label="Pick a date">
+    <div class="calhd"><button class="calnav" data-act="calNav" data-d="-1" aria-label="Previous month">${svg(13, '<path d="M15 6l-6 6 6 6"></path>', 2.2)}</button><span class="calmo">${MF[v.m]} ${v.y}</span><button class="calnav" data-act="calNav" data-d="1" aria-label="Next month">${svg(13, '<path d="M9 6l6 6-6 6"></path>', 2.2)}</button></div>
+    <div class="calwk">${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(x => `<span>${x}</span>`).join('')}</div>
+    <div class="calgrid">${cells}</div></div>`;
 }
 
 /* App-style dropdown used everywhere instead of the browser's native dropdown.
@@ -1038,9 +1059,9 @@ function pageDashboard() {
   const instRows = instList.length ? instList.map(p => {
     const now = p.opsBucket === 'now'; const ids = opsItems(p, now ? 5 : 4);
     const done = ids.filter(x => isClosed(x.st.s)).length;
-    const date = p.installDate ? installLabel(p.installDate) : (now ? 'Now' : 'Not set');
+    const date = now ? (p.installDate ? (daysFrom(p.installDate) > 0 ? installLabel(p.installDate) : 'Day ' + (1 - daysFrom(p.installDate))) : 'Now') : p.installDate ? installLabel(p.installDate) : 'Not set';
     const warn = !now && p.installDate && daysFrom(p.installDate) <= 3 && done < ids.length;
-    return `<button class="irow" data-act="goOps" title="Open in Operations"><span style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(shortName(p.name))}${now ? '<span class="nowtag">NOW</span>' : ''}</span><span style="font-size:11.5px;color:var(--muted)">${esc(p.crew || 'No crew leader yet')}</span></span><span class="mono" style="font-size:11.5px;white-space:nowrap;color:var(--${warn ? 'urgent' : now ? 'prog' : 'muted'})">${date}</span><span class="progbtn${done === ids.length ? ' done' : warn ? ' warn' : ''}"><span class="pbar2"><i style="width:${Math.round(done / ids.length * 100)}%"></i></span><span class="pnum">${done}/${ids.length}</span><span>${now ? 'Install' : 'Pre-install'}</span></span></button>`;
+    return `<button class="irow" data-act="goOps" title="Open in Operations"><span style="display:flex;flex-direction:column;gap:1px;min-width:0"><span style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(shortName(p.name))}${now ? '<span class="nowtag">NOW</span>' : ''}</span><span style="font-size:11.5px;color:var(--muted)">${esc(p.crew || 'No crew leader yet')}</span></span><span class="mono" style="font-size:11.5px;white-space:nowrap;color:var(--${warn ? 'urgent' : now ? 'prog' : 'muted'})"${now && p.installDate ? ` title="${esc(startedLabel(p.installDate))}"` : ''}>${date}</span><span class="progbtn${done === ids.length ? ' done' : warn ? ' warn' : ''}"><span class="pbar2"><i style="width:${Math.round(done / ids.length * 100)}%"></i></span><span class="pnum">${done}/${ids.length}</span><span>${now ? 'Install' : 'Pre-install'}</span></span></button>`;
   }).join('') : `<div class="gempty" style="padding:8px 16px 12px">No jobs past processing yet.</div>`;
   const opsCard = `<section class="card dcard rise" style="animation-delay:70ms"><div class="dhd">${tog('o', 'Operations', `<span style="color:var(--muted);display:flex">${I.truck(15)}</span>`)}<span class="sums">${sums.map(([n, l, c]) => `<span class="sum${c}"><b>${n}</b>${l}</span>`).join('')}</span><button class="dlink press" data-act="goOps">Big board ›</button></div>
     ${dc.o ? '' : `<div class="cbody opsgrid"><div class="opscol"><div class="olabel">Needs processing</div>${procRows}</div><div class="opscol"><div class="olabel">Installs</div>${instRows}</div></div><div class="opsgrid after"><div class="opscol"><div class="olabel">Backorders</div>${afterMini(ST_BACK)}</div><div class="opscol"><div class="olabel">Warranty replacements</div>${afterMini(ST_WARR)}</div></div>`}</section>`;
@@ -1183,6 +1204,9 @@ function opsParts() {
   return { jobs, proc, now, upcoming };
 }
 function soldAge(p) { const d = ((p.steps || {}).w22 || {}).doneAt; return d ? Math.max(0, -daysFrom(d)) : null; }
+/* jobs in Installing now: the date is when they started, never a warning */
+function startedLabel(iso) { if (!iso) return 'Started'; const n = daysFrom(iso); if (n > 0) return 'Starts ' + installLabel(iso); if (n === 0) return 'Started today'; const d = parseISO(iso); return 'Started ' + MO[d.getMonth()] + ' ' + d.getDate(); }
+function installDay(iso) { if (!iso) return ''; const n = -daysFrom(iso); return n >= 1 ? 'day ' + (n + 1) : ''; }
 function installLabel(iso) { if (!iso) return ''; const n = daysFrom(iso); if (n === 0) return 'Today'; if (n === 1) return 'Tomorrow'; const d = parseISO(iso); return WK[d.getDay()] + ', ' + MO[d.getMonth()] + ' ' + d.getDate(); }
 function pageOperations() {
   const { proc, now, upcoming } = opsParts();
@@ -1220,14 +1244,14 @@ function schedRow(p, zone) {
   const dOpen = m && m.kind === 'idate' && m.key === p.id;
   const dow = today0().getDay(); const fri = ((5 - dow + 7) % 7) || 7; const mon = ((1 - dow + 7) % 7) || 7;
   const quick = [['Today', 0], ['Tomorrow', 1], ['By Friday', fri], ['Next Monday', mon], ['Monday after', mon + 7]];
-  const dMenu = dOpen ? `<div class="smenu${U.menuFresh ? ' pop-in' : ''}" role="menu" style="min-width:210px;left:0;right:auto"><div class="mhead">Install date</div>${quick.map(([l, n]) => { const iso = addDays(n); const d = parseISO(iso); return `<button class="mi" data-act="setInstall" data-pid="${p.id}" data-v="${iso}">${l}<span class="hint">${MO[d.getMonth()]} ${d.getDate()}</span></button>`; }).join('')}<label class="mpick">Pick a date<input type="date" value="${p.installDate || ''}" data-change="pickInstall" data-pid="${p.id}"></label>${p.installDate ? `<button class="mi danger" data-act="setInstall" data-pid="${p.id}" data-v="">Clear date</button>` : ''}</div>` : '';
+  const dMenu = dOpen ? `<div class="smenu${U.menuFresh ? ' pop-in' : ''}" role="menu" style="min-width:210px;left:0;right:auto"><div class="mhead">${isNow ? 'Start date' : 'Install date'}</div>${quick.map(([l, n]) => { const iso = addDays(n); const d = parseISO(iso); return `<button class="mi" data-act="setInstall" data-pid="${p.id}" data-v="${iso}">${l}<span class="hint">${MO[d.getMonth()]} ${d.getDate()}</span></button>`; }).join('')}${calBlock(p.installDate || '', `data-act="setInstall" data-pid="${p.id}"`)}${p.installDate ? `<button class="mi danger" data-act="setInstall" data-pid="${p.id}" data-v="">Clear date</button>` : ''}</div>` : '';
   const crews = (S.settings.crews || []).slice().sort((a, b) => a.localeCompare(b));
   const pOpen = m && m.kind === 'prog' && m.key === p.id;
   const pop = pOpen ? `<div class="smenu progpop${U.menuFresh ? ' pop-in' : ''}" role="dialog" aria-label="${isNow ? 'Install' : 'Pre-install'} checklist"><div class="mhead">${isNow ? 'Install' : 'Pre-install'} · ${esc(shortName(p.name))}</div>${ids.map(x => { const s = x.st.s; const ok = isClosed(s); return `<button class="mi pchk${ok ? ' on' : ''}" data-act="progStep" data-pid="${p.id}" data-k="${x.key}"><span class="bx">${I.tick(9)}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis${s === 'N/A' ? ';opacity:.6' : ''}">${esc(x.title)}</span><span class="hint">${s === 'N/A' ? 'N/A' : (x.n || '')}</span></button>`; }).join('')}<a class="mi" href="#/project/${p.id}" style="text-decoration:none;color:var(--accent);font-weight:500;border-top:1px solid var(--line);margin-top:4px;border-radius:0 0 7px 7px">Open project ›</a></div>` : '';
   return `<div class="step srow srow-grid${U.odrag === p.id ? ' dragging' : ''}" data-opid="${p.id}" data-zone="${zone}" draggable="true">
     <span class="grip" title="Drag to the other section" aria-hidden="true">${svg(14, '<circle cx="9" cy="6" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="18" r="1"></circle>', 2.4)}</span>
     <span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="dot" style="width:7px;height:7px;background:${dColor(p.designer)}"></span><a href="#/project/${p.id}" class="clink" title="${esc(p.name)}">${esc(shortName(p.name))}</a>${isNow ? '<span class="nowtag">NOW</span>' : ''}</span>
-    <div style="position:relative;min-width:0"><button class="duebtn press tone-${warn ? 'urgent' : p.installDate ? 'ink' : 'muted'}" data-act="menu" data-kind="idate" data-key="${p.id}" aria-haspopup="menu" aria-expanded="${dOpen}">${I.cal}${p.installDate ? esc(installLabel(p.installDate)) : 'Set date'}</button>${dMenu}</div>
+    <div style="position:relative;min-width:0"><button class="duebtn press tone-${isNow ? (p.installDate ? 'prog' : 'muted') : warn ? 'urgent' : p.installDate ? 'ink' : 'muted'}" data-act="menu" data-kind="idate" data-key="${p.id}" aria-haspopup="menu" aria-expanded="${dOpen}" title="${isNow ? (p.installDate && installDay(p.installDate) ? 'Crew on site · ' + installDay(p.installDate).replace('day', 'Day') : 'Start date (crew on site)') : 'Install date'}">${I.cal}${isNow ? (p.installDate ? esc(startedLabel(p.installDate)) : 'Set start date') : p.installDate ? esc(installLabel(p.installDate)) : 'Set date'}</button>${dMenu}</div>
     ${dpick(p.crew || '', [['', 'No crew leader']].concat(crews.map(c => [c, c])).concat(p.crew && !crews.includes(p.crew) ? [[p.crew, p.crew]] : []), `data-change="crew" data-pid="${p.id}"`, { cls: 'crewpick', btn: 'sel crewsel', placeholder: 'Assign crew leader…', label: 'Crew leader for ' + p.name, left: true })}
     <div style="position:relative"><button class="progbtn press${done === ids.length ? ' done' : warn ? ' warn' : ''}" data-act="menu" data-kind="prog" data-key="${p.id}" aria-haspopup="dialog" aria-expanded="${pOpen}" title="${warn ? 'Install is within 3 days and pre-install isn’t finished' : 'Open checklist'}"><span class="pbar2"><i style="width:${Math.round(done / ids.length * 100)}%"></i></span><span class="pnum">${done}/${ids.length}</span><span>${isNow ? 'Install' : 'Pre-install'}</span></button>${pop}</div>
     <button class="ibtn press" data-act="${isNow ? 'pauseInstall' : 'startInstall'}" data-pid="${p.id}" title="${isNow ? 'Move back to Upcoming' : 'Move to Installing now'}" aria-label="${isNow ? 'Move back to Upcoming' : 'Start install'}">${isNow ? svg(14, '<path d="M12 5v14M6 13l6 6 6-6"></path>', 2) : svg(14, '<path d="M12 19V5M6 11l6-6 6 6"></path>', 2)}</button>
@@ -2079,6 +2103,8 @@ document.addEventListener('click', (e) => {
   const closeMenu = () => { U.menu = null; };
   switch (act) {
     case 'undo': doUndo(); break;
+    case 'calOpen': U.calOpen = true; U.cal = null; render(); break;
+    case 'calNav': { const sd = null; const base = U.cal || (() => { const m = U.menu; let iso = ''; if (m && m.kind === 'idate') iso = (S.projects[m.key] || {}).installDate || ''; const d = iso ? parseISO(iso) : today0(); return { y: d.getFullYear(), m: d.getMonth() }; })(); const dd = new Date(base.y, base.m + Number(a.dataset.d), 1); U.cal = { y: dd.getFullYear(), m: dd.getMonth() }; render(); break; }
     case 'toastClose': U.toast = null; renderToast(); break;
     case 'promptArchive': { const pid = a.dataset.pid; U.toast = null; archiveById(pid); render(); break; }
     case 'promptOpen': { const pid = a.dataset.pid; U.toast = null; renderToast(); const pp = S.projects[pid]; if (pp && !pp.noArchivePrompt) { const q = clone(pp); q.noArchivePrompt = true; putProject(q, { keepTime: true }); } go('#/project/' + pid, { exit: true }); break; }
@@ -2103,7 +2129,7 @@ document.addEventListener('click', (e) => {
     case 'tagRemove': tagRemove(v); break;
     case 'statRange': U.statRange = v; lsSet('gs5:statRange', v); render(); break;
     case 'setSort': { closeMenu(); const key = k; if (key === 'sort') { U.sort = v; lsSet(LS.sort, v); } else if (key === 'tsort') { U.tsort = v; lsSet('gs5:tsort', v); } else if (key === 'asort') { U.asort = v; lsSet('gs5:asort', v); } render(); break; }
-    case 'menu': { const m = { kind: a.dataset.kind, key: a.dataset.key }; U.menu = U.menu && U.menu.kind === m.kind && U.menu.key === m.key ? null : m; if (m.kind === 'tag') { U.tagQ = ''; U.tagHi = 0; } U.menuFresh = !!U.menu; render(); U.menuFresh = false; if (U.menu && U.menu.kind === 'tag') { const ti = document.getElementById('tag-in'); if (ti) ti.focus(); } break; }
+    case 'menu': { const m = { kind: a.dataset.kind, key: a.dataset.key }; U.menu = U.menu && U.menu.kind === m.kind && U.menu.key === m.key ? null : m; if (m.kind === 'tag') { U.tagQ = ''; U.tagHi = 0; } U.calOpen = false; U.cal = null; U.menuFresh = !!U.menu; render(); U.menuFresh = false; if (U.menu && U.menu.kind === 'tag') { const ti = document.getElementById('tag-in'); if (ti) ti.focus(); } break; }
     case 'setDesigner': closeMenu(); if (p && p.designer !== v) mutate(p.id, q => { q.designer = v; }, 'Designer changed to ' + designer(v).name); else render(); break;
     case 'toggle': toggleStep(k, p); break;
     case 'setStatus': closeMenu(); if (p && (v === 'Done' || v === 'N/A') && U.route.page !== 'project') { listComplete(p.id, k, v); break; } if (p) { const x = getItem(p, k); const before = curStage(p); if (x && x.st.s !== v) { mutate(p.id, q => setItem(q, k, { s: v, doneAt: v === 'Done' ? todayISO() : '' }), '“' + x.title + '” · ' + v); const after = curStage(S.projects[p.id]); if (after !== before) { U.open[p.id + ':' + after] = true; render(); } } else render(); } break;

@@ -234,6 +234,23 @@ h2{margin:0;font-size:15px;font-weight:600}
 .mi .hint{margin-left:auto;font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted)}
 .mi.danger{color:var(--urgent)}
 .mhead{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:4px 8px 6px}
+.mpick2{border-top:1px solid var(--line);margin-top:4px;border-radius:0 0 7px 7px}
+.cal{border-top:1px solid var(--line);margin-top:4px;padding:8px 4px 2px}
+.calhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.calmo{font-size:13px;font-weight:600;color:var(--ink)}
+.calnav{border:0;background:transparent;color:var(--muted);width:26px;height:26px;border-radius:7px;display:grid;place-items:center;cursor:pointer}
+.calnav:hover{background:var(--hover);color:var(--ink)}
+.calwk,.calgrid{display:grid;grid-template-columns:repeat(7,30px);gap:2px;justify-content:center}
+.calwk span{font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;color:var(--muted);text-align:center;padding:2px 0 4px}
+.cday{height:30px;border:0;border-radius:8px;background:transparent;color:var(--ink);font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;cursor:pointer;transition:background .1s}
+.cday:hover{background:var(--hover)}
+.cday.we{color:var(--muted)}
+.cday.out{color:color-mix(in srgb,var(--muted) 55%,transparent)}
+.cday.today{box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--accent) 70%,transparent);font-weight:600}
+.cday.sel{background:var(--accent);color:var(--accentInk);font-weight:600}
+.cday.sel:hover{background:var(--accent)}
+.iday{color:var(--muted);margin-left:5px;font-weight:400}
+.tone-prog{color:var(--prog)}
 .mpick{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 8px;border-top:1px solid var(--line);margin-top:4px;font-size:12.5px}
 .mpick input{font-family:'Geist Mono',monospace;font-size:11.5px;border:1px solid var(--line);border-radius:6px;padding:3px 5px;background:var(--bg)}
 .sugbox{padding:6px 8px 8px;margin-bottom:4px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px;font-size:11.5px;color:var(--muted)}

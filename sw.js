@@ -1,8 +1,8 @@
 /* Green Screen v5 service worker — bump VERSION on every upload */
-const VERSION = '5.4.2';
+const VERSION = '5.4.3';
 const CACHE = 'gs5-shell-' + VERSION;
 const RUNTIME = 'gs5-runtime';
-const SHELL = ['./', './index.html', './styles.css?v=5.4.2', './app.js?v=5.4.2', './manifest.json',
+const SHELL = ['./', './index.html', './styles.css?v=5.4.3', './app.js?v=5.4.3', './manifest.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png', './icons/favicon-32.png', './icons/favicon.svg'];
 const FB = 'https://www.gstatic.com/firebasejs/10.13.0/';
 const FIREBASE = [FB + 'firebase-app.js', FB + 'firebase-firestore.js', FB + 'firebase-auth.js'];
