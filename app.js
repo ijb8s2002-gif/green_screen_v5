@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.5.0';
+const APP_VERSION = '5.5.1';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -431,12 +431,18 @@ function render() {
   const main = $('main', r);
   const html = renderPage();
   main.className = 'main' + (U.route.page === 'project' ? ' narrow' : '') + (U.enter ? ' enter' : '') + (U.gone ? ' gone' : '');
+  const hsKeep = (U.hsRoute === U.route.page + (U.route.id || '')) ? [...main.querySelectorAll('.hscroll')].map(h => h.classList.contains('mopen') ? Number(h.dataset.sl || 0) : h.scrollLeft) : [];
   main.innerHTML = html;
+  U.hsRoute = U.route.page + (U.route.id || '');
+  /* keep each wide table where it was scrolled to, so menus open in view */
+  if (hsKeep.length) [...main.querySelectorAll('.hscroll')].forEach((h, i) => { const sl = hsKeep[i] || 0; if (!sl) return; edgeFade(h);
+    if (h.classList.contains('scrolls') && h.querySelector('.smenu:not(.dpmenu)')) { h.dataset.sl = sl; h.style.setProperty('--sl', sl); h.classList.add('mopen'); } else h.scrollLeft = sl; });
   U.enter = false;
   if (U.route.page === 'dashboard') fitRecentRow();
   layoutOpenBoxes();
   if (U.email) { if (U.route.page !== 'operations') U.email = null; else renderEmail(!!U.emailFresh); }
   settleFolds();
+  edgeFades();
   keepStageBar(oldRow);
   POPPED.clear(); POPPED_NOW.forEach(k => POPPED.add(k)); POPPED_NOW = new Set();
   if (keep) {
@@ -1560,6 +1566,11 @@ function statsHtml() {
   </section></div></div>`;
 }
 /* fold panels clip their content only while folding, so sticky columns and menus work once open */
+/* wide tables scroll sideways inside their card; fade the edge that has more to see */
+function edgeFade(el) { const tb = el.firstElementChild; const need = tb ? tb.offsetWidth > el.clientWidth + 1 : false; el.classList.toggle('scrolls', need); if (!need) { el.classList.remove('more-r', 'more-l'); return; } const max = el.scrollWidth - el.clientWidth; el.classList.toggle('more-r', max > 2 && el.scrollLeft < max - 2); el.classList.toggle('more-l', max > 2 && el.scrollLeft > 2); }
+function edgeFades() { document.querySelectorAll('.hscroll').forEach(edgeFade); }
+document.addEventListener('scroll', (e) => { const t = e.target; if (t && t.classList && t.classList.contains('hscroll')) edgeFade(t); }, true);
+window.addEventListener('resize', () => setTimeout(edgeFades, 100));
 function settleFolds() { setTimeout(() => document.querySelectorAll('.fold.opening').forEach(f => f.classList.remove('opening')), 380); }
 function toggleFold(key) {
   if (U[key]) {

@@ -488,12 +488,12 @@ h2{margin:0;font-size:15px;font-weight:600}
 .fpill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12.5px;padding:5px 11px;border-radius:99px;cursor:pointer}
 .fpill:hover{background:var(--hover);color:var(--ink)}
 .fpill.on{background:var(--panel);color:var(--ink);border-color:var(--ink);font-weight:500}
-.trow-grid{grid-template-columns:22px 26px minmax(240px,1fr) 124px 150px 132px 84px 112px}
-.tbody{min-width:860px}
+.trow-grid{grid-template-columns:22px 26px minmax(240px,1fr) 112px 158px 126px 84px 116px;column-gap:10px}
+.tbody{min-width:max-content;width:100%}
 .trow{border-top:1px solid var(--line)}
 .pathcell{display:flex;align-items:center;gap:7px;min-width:0}
-.pathcell .stitle{cursor:default;flex:0 1 auto}
-.clink{flex:0 1 auto;max-width:48%;font-size:13px;font-weight:650;color:var(--ink);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:1px 4px;margin:-1px -4px;border-radius:5px;background-image:linear-gradient(currentColor,currentColor);background-size:0 1px;background-repeat:no-repeat;background-position:4px 100%}
+.pathcell .stitle{cursor:default;flex:0 1 auto;white-space:nowrap}
+.clink{flex:none;max-width:none;font-size:13px;font-weight:650;color:var(--ink);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:1px 4px;margin:-1px -4px;border-radius:5px;background-image:linear-gradient(currentColor,currentColor);background-size:0 1px;background-repeat:no-repeat;background-position:4px 100%}
 .clink:hover{color:var(--accent);background-color:var(--progBg);background-size:calc(100% - 8px) 1px}
 .tcell{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .ptag.opt{color:var(--muted);background:transparent;box-shadow:inset 0 0 0 1px var(--line);border:0;cursor:pointer}
@@ -523,10 +523,23 @@ h2{margin:0;font-size:15px;font-weight:600}
 .tgroup .tbody{padding:0 8px 8px}
 .tgroup.late{border-color:color-mix(in srgb,var(--urgent) 30%,var(--line))}
 .gempty{padding:4px 18px 16px;font-size:13px;color:var(--muted)}
-.hscroll{overflow-x:auto;overflow-y:visible}
+.hscroll{overflow:visible;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--muted) 35%,transparent) transparent;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.hscroll::-webkit-scrollbar{height:6px}
+.hscroll::-webkit-scrollbar-track{background:transparent}
+.hscroll::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--muted) 35%,transparent);border-radius:3px}
+.hscroll::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--muted) 55%,transparent)}
+/* a soft fade on whichever side has more to scroll to */
+.hscroll.more-r{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent)}
+.hscroll.more-l{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to left,#000 calc(100% - 36px),transparent)}
+.hscroll.more-l.more-r{-webkit-mask-image:linear-gradient(to right,transparent,#000 36px,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,transparent,#000 36px,#000 calc(100% - 36px),transparent)}
 /* menus inside scroll areas: let them escape vertically */
-.tgroup .hscroll,.dcard .hscroll{overflow:visible}
-@media (max-width:1100px){.tgroup .hscroll,.dcard .hscroll{overflow-x:auto;padding-bottom:140px;margin-bottom:-140px}}
+/* only tables that don't fit scroll sideways (set by the app after measuring). While a menu is open inside
+   one, the table holds its scroll position with a transform and lets the menu spill out below (clipped only
+   left and right), so date, status and priority menus are never cut off. */
+.hscroll.scrolls{overflow-x:auto;overflow-y:hidden}
+.hscroll.scrolls.mopen{overflow:visible;clip-path:polygon(0 -40px,100% -40px,100% 3000px,0 3000px)}
+.hscroll.scrolls.mopen>.tbody{transform:translateX(calc(var(--sl,0) * -1px))}
+.hscroll.mopen,.hscroll:has(.dpick.open){-webkit-mask-image:none!important;mask-image:none!important}
 
 /* ---------- due soon strip ---------- */
 .strip{display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:5px;margin-bottom:16px}
@@ -745,7 +758,6 @@ select.ein{appearance:none;-webkit-appearance:none;background:var(--bg) url("dat
 .upd{position:fixed;right:20px;bottom:20px;z-index:95;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadowHover);font-size:13px}
 
 /* ---------- responsive ---------- */
-.hscroll{overflow-x:auto}
 @media (max-width:820px){
   .main{padding:22px 16px 72px}
   .side:not(.forced){flex-basis:56px;width:56px;padding-left:8px;padding-right:8px}
