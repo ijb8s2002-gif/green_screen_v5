@@ -3,6 +3,16 @@
 .gs-moss{--bg:#121613;--panel:#1A1F1B;--side:#151915;--ink:#E6E2D6;--muted:#9CA294;--line:#2A302A;--accent:#A8C096;--accentInk:#121613;--hover:#212722;--track:#2A302A;--shadow:0 1px 2px rgba(0,0,0,.3);--shadowHover:0 12px 30px rgba(0,0,0,.45);--isaiah:#7FA07A;--dan:#B7CDA5;--justin:#D1B479;--urgent:#E39A80;--urgentBg:#3A2620;--medium:#D9BA78;--mediumBg:#352E1E;--low:#B2B8AB;--lowBg:#262B26;--waiting:#A9BCCB;--waitingBg:#232B31;--prog:#B7CDA5;--progBg:#26301F;--delay:#E39A80;--delayBg:#3A2620;--assign:#A9BCCB;--assignBg:#232B31;--kraft:#1F231E}
 .gs-stone{--bg:#ECECE8;--panel:#F9F9F7;--side:#E3E3DE;--ink:#25272A;--muted:#63676B;--line:#D8D8D2;--accent:#44574B;--accentInk:#F5F5F2;--hover:#F3F3F0;--track:#E2E2DD;--shadow:0 1px 2px rgba(30,32,34,.05);--shadowHover:0 10px 28px rgba(30,32,34,.10);--isaiah:#7A9178;--dan:#44574B;--justin:#B09A64;--urgent:#923F2E;--urgentBg:#EEDFDA;--medium:#745A22;--mediumBg:#ECE6D6;--low:#555B55;--lowBg:#E4E4E0;--waiting:#455767;--waitingBg:#E0E4E7;--prog:#44574B;--progBg:#DFE5DD;--delay:#923F2E;--delayBg:#EEDFDA;--assign:#455767;--assignBg:#E0E4E7;--kraft:#E8E6DF}
 /* designer swatch palette */
+/* logo palettes: "theme" follows the theme; the rest are fixed and work with any theme */
+.gs-sand{--lgThemeL:#A9BF97}.gs-moss{--lgThemeL:#5C7752}.gs-stone{--lgThemeL:#9DB09A}
+.lg-theme{--lgT:var(--accent);--lgL:var(--lgThemeL);--lgC:var(--accentInk);--lgO:1}
+.lg-sage{--lgT:#7C9874;--lgL:#C3D3B4;--lgC:#FBF8F2;--lgO:1}
+.lg-wheat{--lgT:#B48F4C;--lgL:#E2CC9C;--lgC:#FBF8F2;--lgO:1}
+.lg-clay{--lgT:#94462F;--lgL:#CB8C74;--lgC:#F7F3EA;--lgO:1}
+.lg-slate{--lgT:#465868;--lgL:#93A6B6;--lgC:#F5F5F2;--lgO:1}
+.lg-kraft{--lgT:#E9DFCB;--lgL:#C4B394;--lgC:#3E5940;--lgO:1}
+.lg-blackout{--lgT:#0F100F;--lgL:#343834;--lgC:#F2F2EE;--lgO:1}
+.lg-night{--lgT:#0B1410;--lgL:#9BE15D;--lgC:#E9F7DC;--lgO:.8}
 .gs-sand,.gs-moss,.gs-stone{--c-sage:var(--isaiah);--c-pine:var(--dan);--c-wheat:var(--justin);--c-slate:var(--waiting);--c-ochre:var(--medium);--c-clay:var(--urgent)}
 
 *{box-sizing:border-box}
@@ -26,7 +36,8 @@ a{color:inherit}
 .side{flex:0 0 216px;width:216px;background:var(--side);border-right:1px solid var(--line);padding:22px 14px 16px;display:flex;flex-direction:column;gap:22px;position:sticky;top:0;height:100vh;height:100dvh;z-index:20;align-self:flex-start;transition:flex-basis .32s cubic-bezier(.2,.7,.2,1),width .32s cubic-bezier(.2,.7,.2,1),padding .32s cubic-bezier(.2,.7,.2,1)}
 .side.collapsed{flex-basis:56px;width:56px;padding-left:8px;padding-right:8px}
 .brand{display:flex;align-items:center;gap:10px;padding:0 8px;text-decoration:none}
-.logo{width:28px;height:28px;border-radius:8px;background:var(--accent);display:grid;place-items:center;flex:none}
+.logo{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:none}
+.gslogo{display:block}
 .lbl{display:inline-block;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;transition:max-width .32s cubic-bezier(.2,.7,.2,1),opacity .2s ease}
 .side.collapsed .lbl{max-width:0;opacity:0;padding:0!important;margin:0!important}
 .navlist{display:flex;flex-direction:column;gap:2px}
@@ -148,6 +159,14 @@ h2{margin:0;font-size:15px;font-weight:600}
 .tgrow.on .tgbar i{background:var(--accent)}
 .tgnums{font-size:11.5px;color:var(--muted);white-space:nowrap;text-align:right}
 @media (max-width:700px){.tgrow{grid-template-columns:minmax(0,1fr) auto}.tgnums{text-align:right}.tgbar{grid-column:1/-1;order:3}}
+.logorow{padding:14px 0 4px;border-top:1px solid var(--line);margin-top:14px}
+.lgpick{display:flex;flex-wrap:wrap;gap:8px}
+.lgopt{display:flex;flex-direction:column;align-items:center;gap:6px;border:0;background:transparent;font-family:inherit;font-size:12px;color:var(--muted);padding:8px 6px 6px;border-radius:12px;cursor:pointer;min-width:76px;white-space:nowrap}
+.lgopt:hover{background:var(--hover);color:var(--ink)}
+.lgopt .gslogo{border-radius:11px;transition:transform .12s}
+.lgopt:hover .gslogo{transform:translateY(-1px)}
+.lgopt.on{color:var(--ink);font-weight:600}
+.lgopt.on .gslogo{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--accent)}
 .statbtn{background-image:none;padding-right:12px;gap:6px}
 .statbtn.on{background:var(--accent);color:var(--accentInk);border-color:var(--accent)}
 .fold{display:grid;grid-template-rows:1fr}

@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.4.3';
+const APP_VERSION = '5.5.0';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -47,7 +47,7 @@ const FIREBASE_CONFIG = {
 const FB = 'https://www.gstatic.com/firebasejs/10.13.0/';
 const COL_PROJECTS = 'gs5_projects';
 const COL_META = 'gs5_meta';
-const LS = { mirror: 'gs5:mirror', outbox: 'gs5:outbox', theme: 'gs5:theme', motion: 'gs5:motion', side: 'gs5:sidebarCollapsed', lastDesigner: 'gs5:lastDesigner', drawers: 'gs5:drawers', sort: 'gs5:projectSort' };
+const LS = { mirror: 'gs5:mirror', outbox: 'gs5:outbox', theme: 'gs5:theme', logo: 'gs5:logo', motion: 'gs5:motion', side: 'gs5:sidebarCollapsed', lastDesigner: 'gs5:lastDesigner', drawers: 'gs5:drawers', sort: 'gs5:projectSort' };
 
 /* ============================================================
    UTILITIES
@@ -118,6 +118,7 @@ const S = {
 const U = {
   route: { page: 'projects', id: null },
   theme: lsGet(LS.theme, 'sand'),
+  logo: lsGet(LS.logo, 'theme'),
   motion: lsGet(LS.motion, true),
   collapsed: lsGet(LS.side, false),
   enter: true,
@@ -423,7 +424,8 @@ function render() {
     app.innerHTML = `<div class="gs-root"><aside class="side"></aside><main class="main"></main></div><div id="overlay"></div><div id="toastbox"></div><div id="updbox"></div>`;
   }
   const r = app.firstElementChild;
-  r.className = 'gs-root gs-' + U.theme + (U.motion ? '' : ' nomotion');
+  r.className = 'gs-root gs-' + U.theme + ' lg-' + (U.logo || 'theme') + (U.motion ? '' : ' nomotion');
+  syncFavicon();
   document.body.style.background = getComputedStyle(r).getPropertyValue('--bg') || '';
   $('aside', r).outerHTML = renderSide();
   const main = $('main', r);
@@ -479,7 +481,7 @@ function renderSide() {
       <span class="pbar"><i style="width:${pr.pct}%;background:${dColor(p.designer)}"></i></span></a>`;
   }).join('') : `<div class="lbl" style="font-size:12.5px;color:var(--muted);padding:2px 10px;white-space:normal">No open projects yet</div>`;
   return `<aside class="side${U.collapsed ? ' collapsed' : ''}">
-    <a class="brand" href="#/dashboard" title="Green Screen"><span class="logo">${I.leaf(28)}</span><span class="lbl" style="font-weight:600;font-size:16px;letter-spacing:-.01em;color:var(--ink)">Green Screen</span></a>
+    <a class="brand" href="#/dashboard" title="Green Screen"><span class="logo">${logoSvg(28)}</span><span class="lbl" style="font-weight:600;font-size:16px;letter-spacing:-.01em;color:var(--ink)">Green Screen</span></a>
     <nav class="navlist" aria-label="Main">${navHtml}</nav>
     <div class="sideprojwrap">
       <div class="sidehead"><span class="lbl">Open projects</span></div>
@@ -502,6 +504,28 @@ function fitSideProjects() {
 }
 let fitSideT = null;
 window.addEventListener('resize', () => { clearTimeout(fitSideT); fitSideT = setTimeout(fitSideProjects, 80); });
+/* ============================================================
+   LOGO — "Winding Valley": map contours behind a check. The artwork is one shared symbol in
+   index.html (#gslogo) colored by --lgT (tile), --lgL (contours), --lgC (check). "Match theme"
+   follows Sand / Moss / Stone; the other palettes work with any theme. Saved per device.
+   ============================================================ */
+const LOGOS = [['theme', 'Match theme'], ['sage', 'Sage'], ['wheat', 'Wheat'], ['clay', 'Clay'], ['slate', 'Slate'], ['kraft', 'Kraft'], ['blackout', 'Blackout'], ['night', 'Night']];
+function logoSvg(size) { return `<svg class="gslogo" width="${size}" height="${size}" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><use href="#gslogo"></use></svg>`; }
+let faviconKey = '';
+/* the browser tab icon follows the chosen logo colors (the installed app's home-screen icon is fixed at install) */
+function syncFavicon() {
+  const key = U.theme + '|' + (U.logo || 'theme'); if (key === faviconKey) return;
+  const root = document.querySelector('.gs-root'); const sym = document.getElementById('gslogo'); if (!root || !sym) return;
+  faviconKey = key;
+  const cs = getComputedStyle(root); const v = (n, d) => (cs.getPropertyValue(n) || '').trim() || d;
+  const T = v('--lgT', '#3E5940'), L = v('--lgL', '#A9BF97'), C = v('--lgC', '#F7F3EA'), O = v('--lgO', '1');
+  const body = sym.innerHTML.replace(/var\(--lgT\)/g, T).replace(/var\(--lgL\)/g, L).replace(/var\(--lgC\)/g, C).replace(/var\(--lgO,\s*1\)/g, O).replace(/url\(#gslogo-clip\)/g, 'url(#c)');
+  const svgTxt = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><defs><clipPath id="c"><rect width="120" height="120" rx="28"/></clipPath></defs>${body}</svg>`;
+  let link = document.querySelector('link[rel="icon"][type="image/svg+xml"]');
+  if (!link) { link = document.createElement('link'); link.rel = 'icon'; link.type = 'image/svg+xml'; document.head.appendChild(link); }
+  link.href = 'data:image/svg+xml,' + encodeURIComponent(svgTxt);
+  const png = document.querySelector('link[rel="icon"][type="image/png"]'); if (png) png.remove();
+}
 function syncText() {
   const s = S.sync.state;
   if (s === 'saved') return ['Saved', ago(S.sync.at), 'All changes saved · synced across your devices'];
@@ -1718,6 +1742,8 @@ function pageSettings() {
   return `<div class="phead"><div><div class="eyebrow">Version ${APP_VERSION} · window ${scr}</div><h1>Settings</h1></div></div>
   ${installCard()}
   <section class="card scard rise"><h2>Appearance</h2><p class="sub">Saved on this device.</p><div class="tcards">${tcards}</div>
+    <div class="logorow"><span style="display:block;font-size:13.5px;font-weight:500">Logo</span><span style="display:block;font-size:12.5px;color:var(--muted);margin-bottom:10px">The Winding Valley mark in any colors, with any theme. Shows in the sidebar and the browser tab.</span>
+      <div class="lgpick" role="radiogroup" aria-label="Logo colors">${LOGOS.map(([v, l]) => `<button class="lgopt press lg-${v}${(U.logo || 'theme') === v ? ' on' : ''}" role="radio" aria-checked="${(U.logo || 'theme') === v}" data-act="setLogo" data-v="${v}">${logoSvg(44)}<span>${l}</span></button>`).join('')}</div></div>
     <div class="rowline"><span><span style="display:block;font-size:13.5px;font-weight:500">Motion</span><span style="font-size:12.5px;color:var(--muted)">Animations for completing steps, stages and opening folders. Off keeps everything instant.</span></span><button class="tog${U.motion ? ' on' : ''}" data-act="motion" aria-pressed="${U.motion}" aria-label="Animations"></button></div></section>
   <section class="card scard rise" style="animation-delay:40ms"><h2>Designers</h2><p class="sub">Rename in place and pick each designer’s color. A designer can be removed once they have no projects.</p>${drows}
     <label style="display:flex;align-items:center;gap:10px;padding-top:10px;border-top:1px solid var(--line);color:var(--muted)"><span style="width:22px;display:grid;place-items:center">${I.plus}</span><span class="sr">Add a designer</span><input class="addin" id="add-designer" placeholder="Add designer — press Enter" data-sadd="designer" autocomplete="off"></label></section>
@@ -2172,6 +2198,7 @@ document.addEventListener('click', (e) => {
     case 'cdel': { const i = Number(a.dataset.i); const c = S.settings.crews[i]; settingsChange(st => { st.crews.splice(i, 1); }, c + ' removed'); break; }
     case 'theme': U.theme = v; lsSet(LS.theme, v); render(); renderToast(); break;
     case 'motion': U.motion = !U.motion; lsSet(LS.motion, U.motion); render(); break;
+    case 'setLogo': U.logo = v; lsSet(LS.logo, v); render(); break;
     case 'backup': downloadBackup(); break;
     case 'install': doInstall(); break;
     case 'dsel': U.dsel = v; lsSet('gs5:dsel', v); render(); break;
@@ -2212,7 +2239,7 @@ function installCard() {
     ? 'In Safari, tap the Share button, then <b>Add to Home Screen</b>.'
     : installEvt ? 'Opens in its own window with the Green Screen icon, like any other app.'
     : 'In Chrome, click the install icon at the right end of the address bar, or open the ⋮ menu → <b>Cast, save and share</b> → <b>Install page as app</b>. If you don’t see it, the app may already be installed: check your apps or desktop.';
-  return `<section class="card scard rise"><div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><span style="width:40px;height:40px;border-radius:10px;background:var(--accent);display:grid;place-items:center;flex:none">${I.leaf(40)}</span><span style="flex:1;min-width:220px"><h2 style="margin-bottom:2px">Install Green Screen</h2><span style="font-size:12.5px;color:var(--muted)">${how}</span></span>${installEvt && !ios ? `<button class="btn pri press" data-act="install">${I.download}Install app</button>` : ''}</div></section>`;
+  return `<section class="card scard rise"><div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><span style="width:40px;height:40px;display:grid;place-items:center;flex:none">${logoSvg(40)}</span><span style="flex:1;min-width:220px"><h2 style="margin-bottom:2px">Install Green Screen</h2><span style="font-size:12.5px;color:var(--muted)">${how}</span></span>${installEvt && !ios ? `<button class="btn pri press" data-act="install">${I.download}Install app</button>` : ''}</div></section>`;
 }
 function downloadBackup() {
   const data = { app: 'Green Screen', version: APP_VERSION, exportedAt: new Date().toISOString(), projects: S.projects, workflow: S.workflow, settings: S.settings, activity: S.activity };
