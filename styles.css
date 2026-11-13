@@ -249,6 +249,15 @@ h2{margin:0;font-size:15px;font-weight:600}
 .tone-urgent{color:var(--urgent)}.tone-ink{color:var(--ink)}.tone-muted{color:var(--muted)}
 
 /* ---------- toast ---------- */
+.toast.tprompt{flex-wrap:wrap;gap:8px 10px;padding:12px 10px 12px 14px;max-width:min(720px,calc(100vw - 32px))}
+.tprompt .tpico{width:20px;height:20px;border-radius:99px;background:var(--accent);color:var(--accentInk);display:grid;place-items:center;flex:none}
+.tprompt .tt{flex:1 1 220px;min-width:0}
+.tprompt .tt b{font-weight:600}
+.tprompt .tpsub{display:block;font-size:11.5px;opacity:.65;margin-top:1px}
+.toastbtn.pri{background:var(--accent);color:var(--accentInk);border-color:var(--accent)}
+.toastbtn.ghost{background:transparent;border-color:transparent;opacity:.8}
+.toastx{border:0;background:transparent;color:inherit;opacity:.6;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;cursor:pointer}
+.toastx:hover{opacity:1;background:color-mix(in srgb,var(--bg) 14%,transparent)}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:90;display:flex;align-items:center;gap:12px;padding:10px 10px 10px 14px;border-radius:12px;background:var(--ink);color:var(--bg);box-shadow:var(--shadowHover);font-size:13px;animation:toastIn .3s cubic-bezier(.2,.7,.2,1) backwards;max-width:calc(100vw - 32px)}
 @keyframes toastIn{from{opacity:0;transform:translate(-50%,12px) scale(.98)}to{opacity:1;transform:translateX(-50%)}}
 .toast .tt{max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

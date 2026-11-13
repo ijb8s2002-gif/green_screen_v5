@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.4.1';
+const APP_VERSION = '5.4.2';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -372,6 +372,20 @@ function mutate(pid, fn, label, opts = {}) {
   const before = S.projects[pid] ? clone(S.projects[pid]) : null; if (!before) return;
   const p = clone(before); fn(p); putProject(p, opts);
   if (label) pushUndo(label, () => { putProject(before, { keepTime: true }); if (opts.onUndo) opts.onUndo(before); });
+  /* Finishing Project Install from anywhere but the Project page asks what's next (archive, or keep
+     it open for backorders and warranty) instead of quietly moving the job on. */
+  if (U.route.page !== 'project' && !p.archived && !installDone(before, projItems(before)) && installDone(p, projItems(p))) archivePrompt(pid, label);
+}
+function archivePrompt(pid, label) {
+  const p = S.projects[pid]; if (!p) return;
+  U.toast = { id: Date.now() + Math.random(), text: label || '', canUndo: !!label, prompt: pid };
+  renderToast();
+}
+function archiveById(pid) {
+  const p = S.projects[pid]; if (!p) return;
+  const before = clone(p); const q = clone(p); q.archived = true; q.archivedAt = Date.now(); q.pinned = false;
+  putProject(q);
+  pushUndo(p.name + ' archived', () => putProject(before, { keepTime: true }));
 }
 
 /* ============================================================
@@ -506,6 +520,18 @@ function renderSync() {
 function renderToast() {
   const box = document.getElementById('toastbox'); if (!box) return;
   const t = U.toast;
+  if (t && t.prompt) {
+    const p = S.projects[t.prompt];
+    box.innerHTML = p ? `<div class="toast tprompt" role="alertdialog" aria-live="assertive" aria-label="Project Install complete">
+      <span class="tpico">${I.tick(12)}</span>
+      <span class="tt"><b>${esc(shortName(p.name))}</b> · Project Install is complete.${t.text ? `<span class="tpsub">${esc(t.text)}</span>` : ''}</span>
+      <button class="toastbtn pri press" data-act="promptArchive" data-pid="${p.id}">${I.box(13)}Archive project</button>
+      <button class="toastbtn press" data-act="promptOpen" data-pid="${p.id}" title="Keep it open and go to its Backorders stage">Backorders ›</button>
+      ${t.canUndo ? `<button class="toastbtn ghost press" data-act="undo" title="Undo (Ctrl/⌘ Z)">Undo</button>` : ''}
+      <button class="toastx press" data-act="toastClose" aria-label="Dismiss">${I.x(13)}</button></div>` : '';
+    box.className = 'gs-' + U.theme;
+    return;
+  }
   box.innerHTML = t ? `<div class="toast" role="status" aria-live="polite">${I.tick(14, 'currentColor')}<span class="tt">${esc(t.text)}</span>${t.canUndo ? `<button id="gs-undo" class="toastbtn press" data-act="undo">Undo <span class="kbd">Ctrl/⌘ Z</span></button>` : ''}</div>` : '';
   if (t && t.canUndo) setTimeout(() => { const b = document.getElementById('gs-undo'); if (b && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '')) b.focus({ preventScroll: true }); }, 30);
   if (box.firstElementChild) box.firstElementChild.closest('#toastbox').style.cssText = '';
@@ -2053,6 +2079,9 @@ document.addEventListener('click', (e) => {
   const closeMenu = () => { U.menu = null; };
   switch (act) {
     case 'undo': doUndo(); break;
+    case 'toastClose': U.toast = null; renderToast(); break;
+    case 'promptArchive': { const pid = a.dataset.pid; U.toast = null; archiveById(pid); render(); break; }
+    case 'promptOpen': { const pid = a.dataset.pid; U.toast = null; renderToast(); const pp = S.projects[pid]; if (pp && !pp.noArchivePrompt) { const q = clone(pp); q.noArchivePrompt = true; putProject(q, { keepTime: true }); } go('#/project/' + pid, { exit: true }); break; }
     case 'toggleSide': U.collapsed = !U.collapsed; lsSet(LS.side, U.collapsed); render(); setTimeout(fitSideProjects, 360); break;
     case 'newProject': openNewProject(); break;
     case 'npClose': if (U.np && !U.np.go) { U.np = null; renderModal(); } break;
