@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.5.1';
+const APP_VERSION = '5.5.2';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -740,7 +740,12 @@ function stepCells(p, x) {
   const hasDue = !!st.due;
   const dOpen = m && m.kind === 'due' && m.key === mk;
   const dueMenu = dOpen ? `<div class="smenu${U.menuFresh ? ' pop-in' : ''}" role="menu" style="min-width:210px"><div class="mhead">Target date</div>${quickDates().map(q => `<button class="mi" role="menuitem" data-act="setDue" data-pid="${p.id}" data-k="${k}" data-v="${q.iso}">${q.label}<span class="hint">${q.hint}</span></button>`).join('')}${calBlock(st.due, `data-act="setDue" data-pid="${p.id}" data-k="${k}"`)}${hasDue ? `<button class="mi danger" role="menuitem" data-act="setDue" data-pid="${p.id}" data-k="${k}" data-v="">Clear date</button>` : ''}</div>` : '';
-  const due = `<div style="position:relative;min-width:0"><button class="duebtn press tone-${dueTone(st.due)}${hasDue ? '' : ' empty'}" data-act="menu" data-kind="due" data-key="${mk}" aria-haspopup="menu" aria-expanded="${dOpen}" title="Set target date">${I.cal}${hasDue ? esc(dueLabel(st.due)) : 'Set date'}</button>${dueMenu}</div>`;
+  /* once a step is closed its target date no longer matters: Done shows when it was finished, N/A shows the date quietly */
+  const isDone = st.s === 'Done', isNA = st.s === 'N/A';
+  const shortD = (iso) => { const d = parseISO(iso); return MO[d.getMonth()] + ' ' + d.getDate(); };
+  const dueTxt = isDone ? (st.doneAt ? 'Done ' + shortD(st.doneAt) : (hasDue ? 'Done' : '')) : isNA ? (hasDue ? shortD(st.due) : '') : (hasDue ? dueLabel(st.due) : '');
+  const dueTitle = isDone ? (st.doneAt ? 'Completed ' + shortD(st.doneAt) + (hasDue ? ' · target was ' + shortD(st.due) : '') : 'Completed') : isNA ? 'Not needed' + (hasDue ? ' · target was ' + shortD(st.due) : '') : 'Set target date';
+  const due = `<div style="position:relative;min-width:0"><button class="duebtn press tone-${isDone || isNA ? 'muted' : dueTone(st.due)}${dueTxt ? '' : ' empty'}${isDone ? ' isdone' : ''}" data-act="menu" data-kind="due" data-key="${mk}" aria-haspopup="menu" aria-expanded="${dOpen}" title="${esc(dueTitle)}">${isDone && dueTxt ? svg(13, '<path d="M5 12.5l4.5 4.5L19 7.5"></path>', 2.2) : I.cal}${dueTxt ? esc(dueTxt) : 'Set date'}</button>${dueMenu}</div>`;
   // priority
   const sg = suggestion(x); const sug = !!sg;
   const pOpen = m && m.kind === 'pri' && m.key === mk;
