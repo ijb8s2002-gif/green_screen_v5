@@ -1,5 +1,5 @@
 /* Green Screen v5 — round 1: data & sync, sidebar & themes, New project, Projects, Project page */
-const APP_VERSION = '5.5.2';
+const APP_VERSION = '5.5.3';
 
 /* ============================================================
    CONSTANTS & DEFAULTS
@@ -986,17 +986,25 @@ function listComplete(pid, k, status = 'Done') {
 /* ============================================================
    PAGE — Tasklist
    ============================================================ */
+/* Tasklist sort, shared with the Dashboard's Urgent card so both list tasks in the same order */
+const STATUS_RANK = { 'In Progress': 0, 'Not Started': 1, 'Delayed': 2, 'Assigned': 3 };
+const TSORTS = [['due', 'Due date'], ['status', 'Status'], ['project', 'Project A–Z'], ['stage', 'Stage'], ['recent', 'Recently edited']];
+function taskSorter() {
+  const sorts = { due: byDue,
+    status: (a, b) => ((STATUS_RANK[a.x.st.s] ?? 9) - (STATUS_RANK[b.x.st.s] ?? 9)) || byDue(a, b),
+    project: (a, b) => a.p.name.localeCompare(b.p.name) || byDue(a, b), stage: (a, b) => (a.x.stage - b.x.stage) || byDue(a, b), recent: (a, b) => (b.p.updatedAt || 0) - (a.p.updatedAt || 0) || byDue(a, b) };
+  return sorts[U.tsort] || byDue;
+}
 function pageTasklist() {
   const q = (U.tsearch || '').trim().toLowerCase();
   const rows = openSteps(r => !r.upcoming && dselOK(r.p) && (!q || (q.startsWith('#') ? tagHit(r.p, q) : (r.p.name + ' ' + r.x.title + ' ' + STAGES[r.x.stage] + ' ' + (r.p.po || '')).toLowerCase().includes(q) || tagHit(r.p, q))))
     .concat(Object.keys(U.tleave).map(mk => { const [pid, k] = mk.split(':'); const p = S.projects[pid]; const x = p && getItem(p, k); return p && x && isClosed(x.st.s) ? { p, x, cs: curStage(p), upcoming: false } : null; }).filter(Boolean));
-  const sorts = { due: byDue, project: (a, b) => a.p.name.localeCompare(b.p.name) || byDue(a, b), stage: (a, b) => (a.x.stage - b.x.stage) || byDue(a, b), recent: (a, b) => (b.p.updatedAt || 0) - (a.p.updatedAt || 0) || byDue(a, b) };
-  const sorter = sorts[U.tsort] || byDue;
+  const sorter = taskSorter();
   const total = rows.filter(r => !U.tleave[r.p.id + ':' + r.x.key]).length;
   const head = `<div class="phead"><div><div class="eyebrow">${total} open · current stages only</div><h1>Tasklist</h1></div>
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
       <label><span class="sr">Search tasks</span><input id="t-search" class="search" placeholder="Search tasks, projects or #tag" value="${esc(U.tsearch || '')}" data-input="tsearch" autocomplete="off"></label>
-      ${sortPicker('tsort', U.tsort || 'due', [['due', 'Due date'], ['project', 'Project A–Z'], ['stage', 'Stage'], ['recent', 'Recently edited']])}
+      ${sortPicker('tsort', U.tsort || 'due', TSORTS)}
       <button class="sel selbtn press statbtn${U.stats ? ' on' : ''}" data-act="stats" aria-expanded="${!!U.stats}" title="Recent activity">${svg(14, '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"></path>', 2)}Stats</button>
     </div></div>
     ${U.stats || U.statsClosing ? statsHtml() : ''}
@@ -1073,10 +1081,10 @@ function pageDashboard() {
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px"><label><span class="sr">Search projects</span><input id="d-search" class="search" placeholder="Search projects" data-dsearch="1" autocomplete="off"></label><button class="btn pri press" data-act="newProject">${I.plus}New project</button></div></div>`;
   if (!activeProjects().length) return head + `<div class="empty rise"><h2>Welcome to the new Green Screen</h2><p>Start your first project. Urgent steps, Operations and your recent projects will gather here.</p><button class="btn pri press" data-act="newProject">${I.plus}New project</button></div>`;
   // urgent
-  const urg = openSteps(r => !r.upcoming && r.x.st.p === 'URGENT').concat(Object.keys(U.tleave).map(mk => { const [pid, k] = mk.split(':'); const p = S.projects[pid]; const x = p && getItem(p, k); return p && x && x.st.p === 'URGENT' && isClosed(x.st.s) ? { p, x, cs: curStage(p), upcoming: false } : null; }).filter(Boolean)).sort(byDue);
+  const urg = openSteps(r => !r.upcoming && r.x.st.p === 'URGENT').concat(Object.keys(U.tleave).map(mk => { const [pid, k] = mk.split(':'); const p = S.projects[pid]; const x = p && getItem(p, k); return p && x && x.st.p === 'URGENT' && isClosed(x.st.s) ? { p, x, cs: curStage(p), upcoming: false } : null; }).filter(Boolean)).sort(taskSorter());
   const urgN = urg.filter(r => !U.tleave[r.p.id + ':' + r.x.key]).length;
   const tog = (id, label, extra) => `<button class="ctog press" data-act="dashToggle" data-v="${id}" aria-expanded="${!dc[id]}">${I.chev()}${extra || ''}<h2>${label}</h2></button>`;
-  const urgCard = `<section class="card dcard rise"><div class="dhd">${tog('u', 'Urgent', `<span class="pbtn tile-URGENT" style="pointer-events:none"><span class="bars lv-URGENT"><i class="on"></i><i class="on"></i><i class="on"></i></span></span>`)}<span class="mono" style="font-size:12px;color:var(--muted)">${urgN}</span><span style="font-size:12px;color:var(--muted)">· current stages only</span><button class="dlink press" data-act="navx" data-v="#/tasklist">Tasklist ›</button></div>
+  const urgCard = `<section class="card dcard rise"><div class="dhd">${tog('u', 'Urgent', `<span class="pbtn tile-URGENT" style="pointer-events:none"><span class="bars lv-URGENT"><i class="on"></i><i class="on"></i><i class="on"></i></span></span>`)}<span class="mono" style="font-size:12px;color:var(--muted)">${urgN}</span><span style="font-size:12px;color:var(--muted)">· current stages only${(U.tsort || 'due') !== 'due' ? ' · sorted by ' + esc((TSORTS.find(t => t[0] === U.tsort) || ['', 'Due date'])[1].toLowerCase()) : ''}</span><button class="dlink press" data-act="navx" data-v="#/tasklist">Tasklist ›</button></div>
     ${dc.u ? '' : `<div class="cbody">${urg.length ? `<div class="hscroll" style="padding:0 10px 8px"><div class="tbody">${taskHead()}${urg.map(r => taskRow(r, { idp: 'u' })).join('')}</div></div>` : `<div class="gempty" style="padding:4px 18px 18px">Nothing urgent right now.</div>`}</div>`}</section>`;
   // operations snapshot
   const jobs = opsJobs();
